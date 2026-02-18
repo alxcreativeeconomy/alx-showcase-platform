@@ -20,8 +20,55 @@ import {
   Instagram,
   Globe,
   Sparkles,
-  Zap
+  Zap,
+  Loader
 } from 'lucide-react';
+
+// --- Firebase Imports ---
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  signInAnonymously, 
+  signInWithCustomToken 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  onSnapshot 
+} from 'firebase/firestore';
+
+// --- Firebase Initialization ---
+// Your specific configuration from the previous step
+const localFirebaseConfig = {
+  apiKey: "AIzaSyAryqYa-abV5fPtm5q6JP3OpbcuVgPiXK4",
+  authDomain: "alx-showcase-db.firebaseapp.com",
+  projectId: "alx-showcase-db",
+  storageBucket: "alx-showcase-db.firebasestorage.app",
+  messagingSenderId: "693474179877",
+  appId: "1:693474179877:web:0677e03aa82cee0a22b8cc"
+};
+
+// Logic to handle environment (Canvas Preview vs Local)
+let firebaseConfig;
+try {
+  if (typeof __firebase_config !== 'undefined') {
+    firebaseConfig = JSON.parse(__firebase_config);
+  } else {
+    firebaseConfig = localFirebaseConfig;
+  }
+} catch (e) {
+  firebaseConfig = localFirebaseConfig;
+}
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// Use a static ID for local dev
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'alx-creative-showcase';
 
 // --- Mock Data ---
 const INITIAL_PROJECTS = [
@@ -32,18 +79,10 @@ const INITIAL_PROJECTS = [
     program: "Content Creation",
     city: "Accra, Ghana",
     category: "Video",
-    // Vibrant street dance image
-    image: "/dina.png",
-    
-    // INSTRUCTION: To use your own local video:
-    // 1. Place your video file (e.g., 'dance.mp4') in your project's 'public' folder.
-    // 2. Change the line below to: videoUrl: "/dance.mp4",
+    image: "/dina.png", 
     videoUrl: "/diana.mp4",
     linkedin: "https://www.linkedin.com/in/diana-aidoo/",
-    
-    // NEW: Profile Image for the Creator
     profileImage: "/dina.png", 
-
     description: "Urban Rhythms Ghana is a vibrant visual journey through the streets of Accra, where movement, culture, and sound collide. Captured through the lens of creator Diana Aidoo, the video celebrates Ghana’s street dance scene as a powerful form of self-expression, storytelling, and identity.",
     likes: 124,
     tags: ["AfricanDance", "Ghana", "Culture"],
@@ -56,7 +95,6 @@ const INITIAL_PROJECTS = [
     program: "AI for Creators",
     city: "Lagos, Nigeria",
     category: "Visual",
-    // Futuristic AI art image
     image: "Ai.jpeg", 
     linkedin: "https://www.linkedin.com/",
     profileImage: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=200",
@@ -72,7 +110,6 @@ const INITIAL_PROJECTS = [
     program: "Graphic Design",
     city: "Cairo, Egypt",
     category: "Visual",
-    // Branding/Packaging image
     image: "https://images.unsplash.com/photo-1634128221889-82ed6efebfc3?auto=format&fit=crop&q=80&w=1600", 
     linkedin: "https://www.linkedin.com/",
     profileImage: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200",
@@ -88,7 +125,6 @@ const INITIAL_PROJECTS = [
     program: "3D Animation",
     city: "Accra, Ghana",
     category: "Visual",
-    // Cyberpunk/Sci-fi city concept
     image: "3D.jpeg",
     linkedin: "https://www.linkedin.com/",
     description: "Character design and environment modeling for a sci-fi short film set in 2080 Accra. Rendered in Blender using Cycles with custom procedural textures.",
@@ -103,7 +139,6 @@ const INITIAL_PROJECTS = [
     program: "Audio Engineering",
     city: "Johannesburg, SA",
     category: "Audio",
-    // Savannah landscape
     image: "https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&q=80&w=1600", 
     linkedin: "https://www.linkedin.com/",
     description: "An immersive audio soundscape recorded across three national parks. Best experienced with noise-cancelling headphones.",
@@ -152,10 +187,61 @@ const styles = `
 
 // --- Main App Component ---
 export default function App() {
-  const [view, setView] = useState('home'); // home, gallery, submit, project
-  const [projects, setProjects] = useState(INITIAL_PROJECTS);
+  const [view, setView] = useState('home'); 
+  const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // --- Firebase Auth & Data Sync ---
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        try {
+          await signInAnonymously(auth);
+        } catch (error) {
+          console.error("Auth Error:", error);
+        }
+      }
+    };
+    initAuth();
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    // Fallback to mock data if user not logged in yet, or allow read if your rules allow
+    if (!user) {
+        // We can still try to load projects if security rules allow public read
+        // But for UI smoothness, we'll wait for auth or show mock
+        setProjects(INITIAL_PROJECTS);
+        setLoading(false);
+        return;
+    }
+
+    const projectsRef = collection(db, 'artifacts', appId, 'public', 'data', 'projects');
+    const unsubscribeData = onSnapshot(projectsRef, (snapshot) => {
+      const dbProjects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const allProjects = dbProjects.length > 0 ? dbProjects : INITIAL_PROJECTS;
+      const sortedProjects = allProjects.sort((a, b) => b.createdAt - a.createdAt);
+      
+      setProjects(sortedProjects);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching projects:", error);
+      setLoading(false);
+      setProjects(INITIAL_PROJECTS); 
+    });
+
+    return () => unsubscribeData();
+  }, [user]);
 
   // Navigation Helper
   const navigate = (newView, project = null) => {
@@ -165,11 +251,43 @@ export default function App() {
     setIsMenuOpen(false);
   };
 
-  // Add new project handler
-  const handleSubmission = (newProject) => {
-    setProjects([newProject, ...projects]);
-    navigate('gallery');
+  // Add new project handler (Firestore)
+  const handleSubmission = async (newProject) => {
+    // If auth isn't ready, we just fallback to local state update so it feels responsive
+    if (!user) {
+      setProjects([newProject, ...projects]);
+      navigate('gallery');
+      return;
+    }
+
+    try {
+      const projectToSave = {
+        ...newProject,
+        createdAt: Date.now(),
+        userId: user.uid,
+        likes: 0,
+        featured: false 
+      };
+
+      const projectsRef = collection(db, 'artifacts', appId, 'public', 'data', 'projects');
+      await addDoc(projectsRef, projectToSave);
+      
+      navigate('gallery');
+    } catch (error) {
+      console.error("Error saving project:", error);
+      // Fallback: Show locally even if save failed
+      setProjects([newProject, ...projects]);
+      navigate('gallery');
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader className="w-10 h-10 text-purple-600 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen font-sans text-gray-900 relative overflow-hidden bg-slate-50 selection:bg-pink-200 selection:text-pink-900">
@@ -208,7 +326,6 @@ export default function App() {
             {/* Desktop Nav */}
             <div className="hidden md:flex items-center gap-8">
               <button onClick={() => navigate('gallery')} className="text-sm font-semibold text-gray-600 hover:text-black hover:scale-105 transition duration-300">Gallery</button>
-              <button onClick={() => navigate('home')} className="text-sm font-semibold text-gray-600 hover:text-black hover:scale-105 transition duration-300">Partners</button>
               <button 
                 onClick={() => navigate('submit')}
                 className="bg-gradient-to-r from-black to-gray-800 text-white px-6 py-2.5 rounded-full text-sm font-bold hover:shadow-lg hover:shadow-purple-500/20 hover:-translate-y-0.5 transition-all duration-300 border border-transparent"
@@ -230,7 +347,6 @@ export default function App() {
         {isMenuOpen && (
           <div className="md:hidden glass-panel border-b border-gray-100 px-4 py-4 space-y-4 animate-fade-in">
             <button onClick={() => navigate('gallery')} className="block w-full text-left font-medium p-2 hover:bg-white/50 rounded-lg transition">Gallery</button>
-            <button onClick={() => navigate('home')} className="block w-full text-left font-medium p-2 hover:bg-white/50 rounded-lg transition">Partners</button>
             <button onClick={() => navigate('submit')} className="block w-full text-left font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 p-2">Submit Work</button>
           </div>
         )}
@@ -250,20 +366,13 @@ export default function App() {
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-pink-500 to-yellow-500"></div>
         <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-900 rounded-full mix-blend-screen filter blur-[128px] opacity-20"></div>
         
-        <div className="max-w-7xl mx-auto px-4 grid md:grid-cols-3 gap-12 relative z-10">
-          <div>
+        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between gap-12 relative z-10">
+          <div className="max-w-md">
             <h3 className="font-bold text-2xl mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 inline-block">ALX Creative Showcase</h3>
-            <p className="text-gray-400 text-sm leading-relaxed max-w-xs">Unlocking the next generation of African creative talent through innovation, technology, and art.</p>
+            <p className="text-gray-400 text-sm leading-relaxed">Unlocking the next generation of African creative talent through innovation, technology, and art.</p>
           </div>
-          <div>
-            <h4 className="font-bold mb-6 text-lg">Quick Links</h4>
-            <ul className="space-y-3 text-gray-400 text-sm">
-              <li className="hover:text-white transition cursor-pointer">For Creators</li>
-              <li className="hover:text-white transition cursor-pointer">For Partners</li>
-              <li className="hover:text-white transition cursor-pointer">Past Showcases</li>
-            </ul>
-          </div>
-          <div>
+          
+          <div className="flex flex-col md:items-end">
             <h4 className="font-bold mb-6 text-lg">Connect</h4>
             <div className="flex gap-4">
               <a 
@@ -314,7 +423,8 @@ export default function App() {
 
 // --- VIEW: Home ---
 function HomeView({ navigate, projects }) {
-  const featuredProjects = projects.filter(p => p.featured).slice(0, 3);
+  // Use either the real projects from DB or fallback, take top 3
+  const featuredProjects = projects.slice(0, 3);
 
   return (
     <div className="animate-fade-in">
@@ -351,7 +461,7 @@ function HomeView({ navigate, projects }) {
         </div>
       </section>
 
-      {/* NEW: Vision Video Section */}
+      {/* Vision Video Section */}
       <section className="py-12 max-w-7xl mx-auto px-4">
         <div className="glass-panel rounded-3xl p-8 md:p-12 relative overflow-hidden shadow-2xl">
           {/* Animated Glow Behind */}
@@ -381,16 +491,17 @@ function HomeView({ navigate, projects }) {
             <div className="order-1 lg:order-2 relative group">
               <div className="absolute inset-0 bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl transform rotate-2 scale-105 opacity-20 group-hover:rotate-1 transition duration-500"></div>
               <div className="relative rounded-2xl overflow-hidden shadow-lg border-4 border-white aspect-video bg-black">
-                 {/* Placeholder for the 3D Animated Video - using a relevant ALX video for now */}
-                 <iframe 
+                 {/* Video Player: Uses video tag for local files to ensure playback */}
+                 <video 
                     width="100%" 
                     height="100%" 
-                    src="0202.mp4" 
+                    src="/alx_vid.mp4" 
                     title="ALX Vision Video"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                    allowFullScreen
+                    controls
                     className="w-full h-full object-cover"
-                 ></iframe>
+                 >
+                    Your browser does not support the video tag.
+                 </video>
               </div>
             </div>
           </div>
@@ -440,7 +551,7 @@ function HomeView({ navigate, projects }) {
         <div className="absolute inset-0 bg-black/95 z-0"></div>
         <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-bl from-purple-900/30 to-transparent z-0"></div>
         
-        <div className="max-w-7xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-12 text-center relative z-10 text-white">
+        <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-12 text-center relative z-10 text-white">
           <div className="p-6 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition duration-300">
             <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 mb-3">1.2k+</div>
             <div className="text-sm text-gray-400 font-medium uppercase tracking-widest">Creators</div>
@@ -452,10 +563,6 @@ function HomeView({ navigate, projects }) {
           <div className="p-6 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition duration-300">
             <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-300 mb-3">500+</div>
             <div className="text-sm text-gray-400 font-medium uppercase tracking-widest">Internships</div>
-          </div>
-          <div className="p-6 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition duration-300">
-            <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-300 mb-3">50+</div>
-            <div className="text-sm text-gray-400 font-medium uppercase tracking-widest">Partners</div>
           </div>
         </div>
       </section>
@@ -582,21 +689,17 @@ function SubmitView({ navigate, onSubmit }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Use the uploaded file (blob URL) as the image if available, otherwise use default
-    const hasUploadedFile = formData.link && formData.link.startsWith('blob:');
-    const projectImage = hasUploadedFile 
-      ? formData.link 
-      : 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&q=80&w=800';
+    // Check if the link is a valid URL or just use placeholder for this demo
+    const mediaLink = formData.link || 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&q=80&w=800';
+    
+    // Note: Local files (blob:) will only work for this session on this computer.
+    // To make them permanent, one would need Firebase Storage.
 
-    // Create new project object
     const newProject = {
-      id: Date.now(),
       ...formData,
-      image: projectImage,
-      likes: 0,
-      tags: ["New Submission"],
-      featured: false
+      image: mediaLink,
     };
+    
     onSubmit(newProject);
   };
 
@@ -726,7 +829,7 @@ function SubmitView({ navigate, onSubmit }) {
                         <p className="text-base text-gray-700 font-bold hover:text-purple-600 transition">
                           {formData.link && formData.link.startsWith('blob:') 
                             ? <span className="text-green-600 flex items-center justify-center gap-2"><CheckCircle size={18}/> File Selected</span> 
-                            : "Click to upload files"
+                            : "Click to browse files from your computer"
                           }
                         </p>
                         <p className="text-sm text-gray-400 mt-2">Supports JPG, PNG, MP4</p>
@@ -743,7 +846,7 @@ function SubmitView({ navigate, onSubmit }) {
 
                       <input 
                         type="text" 
-                        placeholder="Paste URL (YouTube, Behance, Drive)" 
+                        placeholder="Paste URL (YouTube, Behance, Drive, or Public Image URL)" 
                         className="w-full bg-white border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                         value={!formData.link?.startsWith('blob:') ? formData.link : ''}
                         onChange={(e) => setFormData({...formData, link: e.target.value})}
@@ -789,6 +892,9 @@ function SubmitView({ navigate, onSubmit }) {
 function ProjectView({ navigate, project }) {
   if (!project) return null;
 
+  // Helper to check if URL is a YouTube/External link or a local file
+  const isExternalVideo = (url) => url.includes('http') || url.includes('www');
+
   return (
     <div className="min-h-screen animate-fade-in">
       <div className="max-w-7xl mx-auto px-4 py-12">
@@ -803,14 +909,25 @@ function ProjectView({ navigate, project }) {
               {/* Dynamic Media Player */}
               <div className="aspect-video relative flex items-center justify-center bg-gray-900">
                 {project.category === 'Video' && project.videoUrl ? (
-                   <iframe 
-                      src={project.videoUrl} 
-                      title={project.title}
-                      className="w-full h-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                      allowFullScreen
-                      referrerPolicy="strict-origin-when-cross-origin"
-                   ></iframe>
+                   isExternalVideo(project.videoUrl) ? (
+                     <iframe 
+                        src={project.videoUrl} 
+                        title={project.title}
+                        className="w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowFullScreen
+                        referrerPolicy="strict-origin-when-cross-origin"
+                     ></iframe>
+                   ) : (
+                     <video 
+                        src={project.videoUrl} 
+                        className="w-full h-full"
+                        controls
+                        autoPlay={false}
+                     >
+                       Your browser does not support the video tag.
+                     </video>
+                   )
                 ) : (
                   <>
                     <img src={project.image} alt={project.title} className="w-full h-full object-contain opacity-90" />
