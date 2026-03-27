@@ -1,1036 +1,703 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+import Hero3D from './Hero3D';
+import { motion, useScroll, useTransform, useInView, useMotionValue, useSpring } from 'framer-motion';
 import { 
-  Upload, 
-  Heart, 
-  Share2, 
-  MapPin, 
-  Search, 
-  Menu, 
-  X, 
   ChevronRight, 
-  Play, 
-  FileText, 
-  Image as ImageIcon, 
-  Music,
-  ArrowLeft,
-  CheckCircle,
-  Filter,
-  ExternalLink,
-  Linkedin,
-  Instagram,
-  Globe,
+  ExternalLink, 
+  MapPin,
   Sparkles,
   Zap,
-  Loader
+  Heart,
+  Play
 } from 'lucide-react';
 
-// --- Firebase Imports ---
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  onAuthStateChanged, 
-  signInAnonymously, 
-  signInWithCustomToken 
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  onSnapshot 
-} from 'firebase/firestore';
+// ─── African Adinkra SVG pattern (Sankofa + Kente geometry) ──────────────────
+const AdinkraPattern = () => (
+  <svg
+    className="absolute inset-0 w-full h-full pointer-events-none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ opacity: 0.04 }}
+  >
+    <defs>
+      <pattern id="adinkra" x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
+        {/* Kente strip motif */}
+        <rect x="0" y="0" width="80" height="80" fill="none" />
+        <rect x="10" y="10" width="60" height="60" fill="none" stroke="currentColor" strokeWidth="1" />
+        <rect x="20" y="20" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="0.5" />
+        <circle cx="40" cy="40" r="8" fill="none" stroke="currentColor" strokeWidth="1" />
+        <line x1="10" y1="10" x2="70" y2="70" stroke="currentColor" strokeWidth="0.5" />
+        <line x1="70" y1="10" x2="10" y2="70" stroke="currentColor" strokeWidth="0.5" />
+        <circle cx="10" cy="10" r="2" fill="currentColor" />
+        <circle cx="70" cy="10" r="2" fill="currentColor" />
+        <circle cx="10" cy="70" r="2" fill="currentColor" />
+        <circle cx="70" cy="70" r="2" fill="currentColor" />
+        <circle cx="40" cy="10" r="1.5" fill="currentColor" />
+        <circle cx="40" cy="70" r="1.5" fill="currentColor" />
+        <circle cx="10" cy="40" r="1.5" fill="currentColor" />
+        <circle cx="70" cy="40" r="1.5" fill="currentColor" />
+      </pattern>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#adinkra)" />
+  </svg>
+);
 
-// --- Firebase Initialization ---
-// Your specific configuration from the previous step
-const localFirebaseConfig = {
-  apiKey: "AIzaSyAryqYa-abV5fPtm5q6JP3OpbcuVgPiXK4",
-  authDomain: "alx-showcase-db.firebaseapp.com",
-  projectId: "alx-showcase-db",
-  storageBucket: "alx-showcase-db.firebasestorage.app",
-  messagingSenderId: "693474179877",
-  appId: "1:693474179877:web:0677e03aa82cee0a22b8cc"
+// ─── Pulsing tribal ring ornament ────────────────────────────────────────────
+const TribalRing = ({ size = 400, color = '#f59e0b', delay = 0, style = {} }) => (
+  <motion.div
+    animate={{
+      scale: [1, 1.15, 1],
+      opacity: [0.15, 0.35, 0.15],
+      rotate: [0, 60, 0],
+    }}
+    transition={{ duration: 12 + delay, repeat: Infinity, ease: 'easeInOut', delay }}
+    style={{
+      width: size,
+      height: size,
+      borderRadius: '50%',
+      border: `2px solid ${color}`,
+      position: 'absolute',
+      ...style,
+    }}
+  />
+);
+
+// ─── Magnetic button hook ─────────────────────────────────────────────────────
+function useMagnetic(strength = 0.3) {
+  const ref = useRef(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const sx = useSpring(x, { stiffness: 200, damping: 20 });
+  const sy = useSpring(y, { stiffness: 200, damping: 20 });
+
+  const handleMove = (e) => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    x.set((e.clientX - cx) * strength);
+    y.set((e.clientY - cy) * strength);
+  };
+
+  const handleLeave = () => {
+    x.set(0);
+    y.set(0);
+  };
+
+  return { ref, sx, sy, handleMove, handleLeave };
+}
+
+// ─── Magnetic CTA Button ──────────────────────────────────────────────────────
+function MagneticButton({ children, onClick, variant = 'dark', className = '' }) {
+  const { ref, sx, sy, handleMove, handleLeave } = useMagnetic(0.25);
+
+  const base = `relative px-10 py-5 rounded-full font-black text-lg cursor-pointer overflow-hidden transition-all duration-500 `;
+  const dark = `bg-gray-950 text-white border border-gray-800 `;
+  const glass = `bg-white/10 text-white border border-white/30 backdrop-blur-xl `;
+
+  return (
+    <motion.button
+      ref={ref}
+      style={{ x: sx, y: sy }}
+      onMouseMove={handleMove}
+      onMouseLeave={handleLeave}
+      whileTap={{ scale: 0.95 }}
+      onClick={onClick}
+      className={base + (variant === 'dark' ? dark : glass) + className}
+    >
+      {/* Glow layer */}
+      <motion.span
+        className="absolute inset-0 rounded-full pointer-events-none"
+        initial={{ opacity: 0 }}
+        whileHover={{ opacity: 1 }}
+        style={{
+          background:
+            variant === 'dark'
+              ? 'radial-gradient(circle at center, rgba(245,158,11,0.25) 0%, transparent 70%)'
+              : 'radial-gradient(circle at center, rgba(255,255,255,0.2) 0%, transparent 70%)',
+          filter: 'blur(8px)',
+        }}
+      />
+      <span className="relative z-10 flex items-center gap-3">{children}</span>
+    </motion.button>
+  );
+}
+
+// ─── Stagger container ────────────────────────────────────────────────────────
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.14, delayChildren: 0.1 },
+  },
 };
 
-// Logic to handle environment (Canvas Preview vs Local)
-let firebaseConfig;
-try {
-  if (typeof __firebase_config !== 'undefined') {
-    firebaseConfig = JSON.parse(__firebase_config);
-  } else {
-    firebaseConfig = localFirebaseConfig;
-  }
-} catch (e) {
-  firebaseConfig = localFirebaseConfig;
-}
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-// Use a static ID for local dev
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'alx-creative-showcase';
-
-// --- Mock Data ---
-const INITIAL_PROJECTS = [
-  {
-    id: 1,
-    title: "Urban Rhythms: Ghana",
-    creator: "Diana Aidoo.",
-    program: "Content Creation",
-    city: "Accra, Ghana",
-    category: "Video",
-    image: "/dina.png", 
-    videoUrl: "/diana.mp4",
-    linkedin: "https://www.linkedin.com/in/diana-aidoo/",
-    profileImage: "/dina.png", 
-    description: "Urban Rhythms Ghana is a vibrant visual journey through the streets of Accra, where movement, culture, and sound collide. Captured through the lens of creator Diana Aidoo, the video celebrates Ghana’s street dance scene as a powerful form of self-expression, storytelling, and identity.",
-    likes: 124,
-    tags: ["AfricanDance", "Ghana", "Culture"],
-    featured: true
+const slideUp = {
+  hidden: { opacity: 0, y: 60, filter: 'blur(4px)' },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: { type: 'spring', stiffness: 60, damping: 18 },
   },
-  {
-    id: 2,
-    title: "Generative Lagos: 2050",
-    creator: "Tunde M.",
-    program: "AI for Creators",
-    city: "Lagos, Nigeria",
-    category: "Visual",
-    image: "Ai.jpeg", 
-    linkedin: "https://www.linkedin.com/",
-    profileImage: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=200",
-    description: "A series of AI-generated landscapes imagining Lagos in the year 2050. Created using Midjourney and Stable Diffusion, this project explores the intersection of traditional Yoruba architecture and cyberpunk aesthetics.",
-    likes: 215,
-    tags: ["AI Art", "Midjourney", "Futurism"],
-    featured: true
-  },
-  {
-    id: 3,
-    title: "Savannah Coffee Branding",
-    creator: "Layla H.",
-    program: "Graphic Design",
-    city: "Cairo, Egypt",
-    category: "Visual",
-    image: "https://images.unsplash.com/photo-1634128221889-82ed6efebfc3?auto=format&fit=crop&q=80&w=1600", 
-    linkedin: "https://www.linkedin.com/",
-    profileImage: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200",
-    description: "A complete brand identity and packaging design for an artisanal coffee startup. The visual language uses geometric patterns inspired by Egyptian textiles to create a modern yet rooted look.",
-    likes: 143,
-    tags: ["Branding", "Packaging", "Typography"],
-    featured: false
-  },
-  {
-    id: 4,
-    title: "Afro-Futurism 3D Concept",
-    creator: "Kofi A.",
-    program: "3D Animation",
-    city: "Accra, Ghana",
-    category: "Visual",
-    image: "3D.jpeg",
-    linkedin: "https://www.linkedin.com/",
-    description: "Character design and environment modeling for a sci-fi short film set in 2080 Accra. Rendered in Blender using Cycles with custom procedural textures.",
-    likes: 210,
-    tags: ["Blender", "3D", "Concept Art"],
-    featured: true
-  },
-  {
-    id: 5,
-    title: "Sounds of the Savannah",
-    creator: "Zola B.",
-    program: "Audio Engineering",
-    city: "Johannesburg, SA",
-    category: "Audio",
-    image: "https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&q=80&w=1600", 
-    linkedin: "https://www.linkedin.com/",
-    description: "An immersive audio soundscape recorded across three national parks. Best experienced with noise-cancelling headphones.",
-    likes: 45,
-    tags: ["Sound Design", "Field Recording", "Nature"],
-    featured: false
-  }
-];
+};
 
-// --- Styles for Animation ---
-const styles = `
-@keyframes float {
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-20px); }
-  100% { transform: translateY(0px); }
-}
-@keyframes fade-in-up {
-  0% { opacity: 0; transform: translateY(20px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-@keyframes blob {
-  0% { transform: translate(0px, 0px) scale(1); }
-  33% { transform: translate(30px, -50px) scale(1.1); }
-  66% { transform: translate(-20px, 20px) scale(0.9); }
-  100% { transform: translate(0px, 0px) scale(1); }
-}
-.animate-blob {
-  animation: blob 7s infinite;
-}
-.animation-delay-2000 {
-  animation-delay: 2s;
-}
-.animation-delay-4000 {
-  animation-delay: 4s;
-}
-.glass-panel {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-}
-.animate-fade-in {
-  animation: fade-in-up 0.6s ease-out forwards;
-}
-`;
+const fadeIn = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0.8 } },
+};
 
-// --- Main App Component ---
-export default function App() {
-  const [view, setView] = useState('home'); 
-  const [projects, setProjects] = useState([]);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // --- Firebase Auth & Data Sync ---
-  useEffect(() => {
-    const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        try {
-          await signInAnonymously(auth);
-        } catch (error) {
-          console.error("Auth Error:", error);
-        }
-      }
-    };
-    initAuth();
-
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-
-    return () => unsubscribeAuth();
-  }, []);
-
-  useEffect(() => {
-    // Fallback to mock data if user not logged in yet, or allow read if your rules allow
-    if (!user) {
-        // We can still try to load projects if security rules allow public read
-        // But for UI smoothness, we'll wait for auth or show mock
-        setProjects(INITIAL_PROJECTS);
-        setLoading(false);
-        return;
-    }
-
-    const projectsRef = collection(db, 'artifacts', appId, 'public', 'data', 'projects');
-    const unsubscribeData = onSnapshot(projectsRef, (snapshot) => {
-      const dbProjects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const allProjects = dbProjects.length > 0 ? dbProjects : INITIAL_PROJECTS;
-      const sortedProjects = allProjects.sort((a, b) => b.createdAt - a.createdAt);
-      
-      setProjects(sortedProjects);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching projects:", error);
-      setLoading(false);
-      setProjects(INITIAL_PROJECTS); 
-    });
-
-    return () => unsubscribeData();
-  }, [user]);
-
-  // Navigation Helper
-  const navigate = (newView, project = null) => {
-    window.scrollTo(0, 0);
-    setView(newView);
-    if (project) setSelectedProject(project);
-    setIsMenuOpen(false);
-  };
-
-  // Add new project handler (Firestore)
-  const handleSubmission = async (newProject) => {
-    // If auth isn't ready, we just fallback to local state update so it feels responsive
-    if (!user) {
-      setProjects([newProject, ...projects]);
-      navigate('gallery');
-      return;
-    }
-
-    try {
-      const projectToSave = {
-        ...newProject,
-        createdAt: Date.now(),
-        userId: user.uid,
-        likes: 0,
-        featured: false 
-      };
-
-      const projectsRef = collection(db, 'artifacts', appId, 'public', 'data', 'projects');
-      await addDoc(projectsRef, projectToSave);
-      
-      navigate('gallery');
-    } catch (error) {
-      console.error("Error saving project:", error);
-      // Fallback: Show locally even if save failed
-      setProjects([newProject, ...projects]);
-      navigate('gallery');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader className="w-10 h-10 text-purple-600 animate-spin" />
-      </div>
-    );
-  }
+// ─── Scroll-triggered section wrapper ────────────────────────────────────────
+function RevealSection({ children, className = '', delay = 0 }) {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: '-80px' });
 
   return (
-    <div className="min-h-screen font-sans text-gray-900 relative overflow-hidden bg-slate-50 selection:bg-pink-200 selection:text-pink-900">
-      <style>{styles}</style>
-      
-      {/* Animated Background Blobs */}
-      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
-        <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
-        <div className="absolute bottom-0 right-0 w-full h-full bg-gradient-to-t from-white via-transparent to-transparent opacity-80"></div>
-      </div>
-
-      {/* Navigation Bar */}
-      <nav className="sticky top-0 z-50 glass-panel border-b border-white/40 shadow-sm transition-all duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            <div 
-              className="flex items-center gap-3 cursor-pointer group" 
-              onClick={() => navigate('home')}
-            >
-              {/* Logo */}
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-pink-500 to-purple-500 blur opacity-20 group-hover:opacity-40 transition duration-500 rounded-full"></div>
-                <img 
-                  src="/alx-logo.png" 
-                  alt="ALX Logo" 
-                  className="h-10 w-auto object-contain relative z-10" 
-                />
-              </div>
-              <span className="font-extrabold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
-                ALX CREATIVE SHOWCASE
-              </span>
-            </div>
-
-            {/* Desktop Nav */}
-            <div className="hidden md:flex items-center gap-8">
-              <button onClick={() => navigate('gallery')} className="text-sm font-semibold text-gray-600 hover:text-black hover:scale-105 transition duration-300">Gallery</button>
-              <button 
-                onClick={() => navigate('submit')}
-                className="bg-gradient-to-r from-black to-gray-800 text-white px-6 py-2.5 rounded-full text-sm font-bold hover:shadow-lg hover:shadow-purple-500/20 hover:-translate-y-0.5 transition-all duration-300 border border-transparent"
-              >
-                Submit Work
-              </button>
-            </div>
-
-            {/* Mobile Menu Button */}
-            <div className="md:hidden">
-              <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 rounded-lg hover:bg-gray-100 transition">
-                {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile Nav Dropdown */}
-        {isMenuOpen && (
-          <div className="md:hidden glass-panel border-b border-gray-100 px-4 py-4 space-y-4 animate-fade-in">
-            <button onClick={() => navigate('gallery')} className="block w-full text-left font-medium p-2 hover:bg-white/50 rounded-lg transition">Gallery</button>
-            <button onClick={() => navigate('submit')} className="block w-full text-left font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 p-2">Submit Work</button>
-          </div>
-        )}
-      </nav>
-
-      {/* Main Content Area */}
-      <main className="relative z-10">
-        {view === 'home' && <HomeView navigate={navigate} projects={projects} />}
-        {view === 'gallery' && <GalleryView navigate={navigate} projects={projects} />}
-        {view === 'submit' && <SubmitView navigate={navigate} onSubmit={handleSubmission} />}
-        {view === 'project' && <ProjectView navigate={navigate} project={selectedProject} />}
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-black text-white py-16 mt-20 relative overflow-hidden">
-        {/* Subtle footer gradient */}
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-pink-500 to-yellow-500"></div>
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-900 rounded-full mix-blend-screen filter blur-[128px] opacity-20"></div>
-        
-        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between gap-12 relative z-10">
-          <div className="max-w-md">
-            <h3 className="font-bold text-2xl mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 inline-block">ALX Creative Showcase</h3>
-            <p className="text-gray-400 text-sm leading-relaxed">Unlocking the next generation of African creative talent through innovation, technology, and art.</p>
-          </div>
-          
-          <div className="flex flex-col md:items-end">
-            <h4 className="font-bold mb-6 text-lg">Connect</h4>
-            <div className="flex gap-4">
-              <a 
-                href="https://www.linkedin.com/school/alx-africa/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="w-12 h-12 bg-gray-900 border border-gray-800 rounded-full flex items-center justify-center hover:bg-blue-600 hover:border-blue-500 hover:text-white text-gray-400 transition-all duration-300"
-                title="LinkedIn"
-              >
-                <Linkedin size={20} />
-              </a>
-              <a 
-                href="https://www.instagram.com/alx_africa/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="w-12 h-12 bg-gray-900 border border-gray-800 rounded-full flex items-center justify-center hover:bg-pink-600 hover:border-pink-500 hover:text-white text-gray-400 transition-all duration-300"
-                title="Instagram"
-              >
-                <Instagram size={20} />
-              </a>
-              <a 
-                href="https://www.tiktok.com/@alx_africa" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="w-12 h-12 bg-gray-900 border border-gray-800 rounded-full flex items-center justify-center hover:bg-gray-700 hover:border-gray-600 hover:text-white text-gray-400 transition-all duration-300"
-                title="TikTok"
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                  <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.65-1.54-1.15v8.36c0 1.21-.19 2.38-.77 3.42-.96 1.69-2.5 2.97-4.41 3.53-3.6 1.09-7.51-.71-8.99-4.17-1.12-2.62-.25-5.91 2.11-7.79 1.71-1.35 4.09-1.57 6.01-.52v4.29c-.84-.5-1.92-.62-2.82-.25-.9.37-1.54 1.22-1.62 2.21-.08 1.02.51 2.02 1.43 2.47.93.45 2.05.28 2.8-.46.75-.72.93-1.85.5-2.82V.02z"/>
-                </svg>
-              </a>
-              <a 
-                href="https://www.alxafrica.com" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="w-12 h-12 bg-gray-900 border border-gray-800 rounded-full flex items-center justify-center hover:bg-green-600 hover:border-green-500 hover:text-white text-gray-400 transition-all duration-300"
-                title="Join ALX"
-              >
-                <Globe size={20} />
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
-    </div>
+    <motion.div
+      ref={ref}
+      initial="hidden"
+      animate={isInView ? 'show' : 'hidden'}
+      variants={staggerContainer}
+      className={className}
+      style={{ transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </motion.div>
   );
 }
 
-// --- VIEW: Home ---
-function HomeView({ navigate, projects }) {
-  // Use either the real projects from DB or fallback, take top 3
-  const featuredProjects = projects.slice(0, 3);
+// ─── Featured Project Card ────────────────────────────────────────────────────
+function FeaturedCard({ project, index, onClick }) {
+  const isHero = index === 0;
+  const isTall = index === 1;
 
   return (
-    <div className="animate-fade-in">
-      {/* Hero Section */}
-      <section className="relative py-24 lg:py-36 px-4 overflow-hidden">
-        <div className="max-w-5xl mx-auto text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/60 backdrop-blur-md border border-white/50 rounded-full text-xs font-bold tracking-wide mb-8 shadow-sm animate-[float_4s_ease-in-out_infinite]">
-            <Sparkles size={14} className="text-yellow-500" /> FESTIVAL 2026 NOW OPEN
-          </div>
-          
-          <h1 className="text-6xl md:text-8xl font-black tracking-tight text-gray-900 mb-8 leading-[1.1]">
-            Discover Africa's <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-500 to-yellow-500">Untapped Creative Talent</span>
-          </h1>
-          
-          <p className="text-xl md:text-2xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed font-light">
-            The ALX Creative Showcase is the premier digital stage for storytellers, designers, and innovators. <span className="font-medium text-gray-900">Join the movement.</span>
+    <motion.div
+      variants={slideUp}
+      onClick={() => onClick(project)}
+      className={`group relative cursor-pointer rounded-[2rem] overflow-hidden bg-gray-900 shadow-xl
+        ${isHero ? 'md:col-span-7 row-span-2' : isTall ? 'md:col-span-5' : 'md:col-span-5'}
+      `}
+      style={{ minHeight: isHero ? 560 : 360 }}
+    >
+      {/* Image */}
+      <motion.img
+        src={project.image}
+        alt={project.title}
+        className="absolute inset-0 w-full h-full object-cover"
+        whileHover={{ scale: 1.05 }}
+        transition={{ duration: 1, ease: [0.25, 0.46, 0.45, 0.94] }}
+      />
+
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+
+      {/* African diamond pattern on hover */}
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        initial={{ opacity: 0 }}
+        whileHover={{ opacity: 1 }}
+        transition={{ duration: 0.4 }}
+        style={{
+          backgroundImage: `repeating-linear-gradient(
+            45deg,
+            rgba(245,158,11,0.06) 0px,
+            rgba(245,158,11,0.06) 1px,
+            transparent 1px,
+            transparent 14px
+          )`,
+        }}
+      />
+
+      {/* Category badge */}
+      <div className="absolute top-6 left-6">
+        <span className="inline-flex items-center gap-1.5 bg-amber-400/90 backdrop-blur text-black text-xs font-black px-4 py-2 rounded-full uppercase tracking-widest shadow-lg">
+          {project.category === 'Video' && <Play size={10} fill="currentColor" />}
+          {project.category}
+        </span>
+      </div>
+
+      {/* Heart count */}
+      <div className="absolute top-6 right-6 flex items-center gap-1.5 text-white/80 text-sm font-bold bg-black/30 backdrop-blur-md px-3 py-2 rounded-full">
+        <Heart size={14} fill="currentColor" className="text-pink-400" />
+        {project.likes}
+      </div>
+
+      {/* Content */}
+      <div className="absolute bottom-0 left-0 right-0 p-8">
+        <motion.div
+          initial={{ y: 12, opacity: 0.7 }}
+          whileHover={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.4 }}
+        >
+          <p className="text-amber-400 text-xs font-black uppercase tracking-[0.2em] mb-2">
+            {project.program}
           </p>
-          
-          <div className="flex flex-col sm:flex-row gap-5 justify-center">
-            <button 
-              onClick={() => navigate('submit')}
-              className="px-10 py-4 bg-gray-900 text-white rounded-full font-bold hover:bg-gray-800 transition shadow-xl shadow-purple-500/10 hover:shadow-purple-500/30 transform hover:-translate-y-1"
-            >
-              Submit Your Work
-            </button>
-            <button 
-              onClick={() => navigate('gallery')}
-              className="px-10 py-4 bg-white/70 backdrop-blur-sm text-gray-900 border border-white rounded-full font-bold hover:bg-white transition shadow-lg shadow-gray-200/50"
-            >
-              Explore Showcase
-            </button>
+          <h3 className={`text-white font-black leading-tight mb-3 ${isHero ? 'text-4xl md:text-5xl' : 'text-2xl md:text-3xl'}`}>
+            {project.title}
+          </h3>
+          <div className="flex items-center justify-between">
+            <p className="text-white/70 text-base">{project.creator}</p>
+            <div className="flex items-center gap-1.5 text-white/60 text-sm">
+              <MapPin size={14} />
+              {project.city}
+            </div>
           </div>
-        </div>
-      </section>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
 
-      {/* Vision Video Section */}
-      <section className="py-12 max-w-7xl mx-auto px-4">
-        <div className="glass-panel rounded-3xl p-8 md:p-12 relative overflow-hidden shadow-2xl">
-          {/* Animated Glow Behind */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-3/4 bg-purple-500/20 rounded-full blur-[100px] -z-10"></div>
-          
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="order-2 lg:order-1">
-              <div className="inline-flex items-center gap-2 text-purple-600 font-bold tracking-widest text-sm uppercase mb-4">
-                <Zap size={16} /> The Vision
-              </div>
-              <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-6 leading-tight">
-                Your Creativity. <br/>
-                Our Platform. <br/>
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600">Africa's Future.</span>
-              </h2>
-              <p className="text-gray-600 text-lg mb-8 leading-relaxed">
-                We believe that talent is equally distributed, but opportunity is not. ALX bridges that gap by empowering the next generation of creative leaders with the skills, network, and stage they need to shine.
-              </p>
-              <button 
-                onClick={() => window.open('https://www.alxafrica.com', '_blank')}
-                className="inline-flex items-center gap-2 text-gray-900 font-bold border-b-2 border-gray-900 hover:text-purple-600 hover:border-purple-600 transition pb-1"
+// ─── Kente stripe divider ────────────────────────────────────────────────────
+const KenteDivider = () => (
+  <div className="w-full h-3 flex overflow-hidden">
+    {['#D4AF37', '#2D6A4F', '#D62828', '#F9A12E', '#1B4332', '#E63946', '#D4AF37', '#2D6A4F'].map(
+      (c, i) => (
+        <div key={i} className="flex-1" style={{ backgroundColor: c }} />
+      )
+    )}
+  </div>
+);
+
+// ─── Animated counter ────────────────────────────────────────────────────────
+function AnimCounter({ target, suffix = '' }) {
+  const [count, setCount] = useState(0);
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true });
+
+  useEffect(() => {
+    if (!inView) return;
+    let start = 0;
+    const end = parseInt(target.replace(/\D/g, ''), 10);
+    const duration = 1800;
+    const step = Math.ceil(end / (duration / 16));
+    const timer = setInterval(() => {
+      start += step;
+      if (start >= end) { setCount(end); clearInterval(timer); }
+      else setCount(start);
+    }, 16);
+    return () => clearInterval(timer);
+  }, [inView, target]);
+
+  return (
+    <span ref={ref}>
+      {count.toLocaleString()}{suffix}
+    </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ▌ HOME VIEW — Main export
+// ═══════════════════════════════════════════════════════════════════════════════
+export default function HomeView({ navigate, projects = [] }) {
+  const featuredProjects = (projects || []).filter((p) => p.featured).slice(0, 3);
+  const heroRef = useRef(null);
+  const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
+  const heroY = useTransform(scrollYProgress, [0, 1], ['0%', '25%']);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
+
+  return (
+    <div
+      className="relative text-gray-900"
+      style={{ fontFamily: "'Syne', 'Space Grotesk', system-ui, sans-serif" }}
+    >
+      {/* Load Syne typeface */}
+      <link
+        href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&display=swap"
+        rel="stylesheet"
+      />
+
+      {/* ══════════════════════════════════════════════════════════════
+          FRAME 1 — THE ENTRANCE (Full cinematic hero)
+      ══════════════════════════════════════════════════════════════ */}
+      <section
+        ref={heroRef}
+        className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[#0A0704] pt-20"
+      >
+        {/* Adinkra fabric texture */}
+        <div className="absolute inset-0 text-amber-300 z-0">
+          <AdinkraPattern />
+        </div>
+
+        {/* ── Radial colour splashes ── */}
+        {/* Reddish-gold  */}
+        <motion.div
+          animate={{ scale: [1, 1.3, 1], opacity: [0.45, 0.7, 0.45], x: [0, 20, 0] }}
+          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute -top-32 -left-40 w-[700px] h-[700px] rounded-full pointer-events-none z-0"
+          style={{ background: 'radial-gradient(circle, #D4AF37 0%, transparent 65%)', filter: 'blur(80px)' }}
+        />
+        {/* Deep crimson */}
+        <motion.div
+          animate={{ scale: [1, 1.5, 1], opacity: [0.3, 0.55, 0.3], y: [0, -30, 0] }}
+          transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
+          className="absolute -bottom-40 -right-40 w-[800px] h-[800px] rounded-full pointer-events-none z-0"
+          style={{ background: 'radial-gradient(circle, #9B1D20 0%, transparent 60%)', filter: 'blur(90px)' }}
+        />
+        {/* Forest green */}
+        <motion.div
+          animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.45, 0.2], rotate: [0, 20, 0] }}
+          transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full pointer-events-none z-0"
+          style={{ background: 'radial-gradient(circle, #1B4332 0%, transparent 65%)', filter: 'blur(70px)' }}
+        />
+
+        {/* ── Tribal concentric rings ── */}
+        <TribalRing size={600} color="#D4AF37" delay={0} style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1 }} />
+        <TribalRing size={800} color="#9B1D20" delay={2} style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1 }} />
+        <TribalRing size={1050} color="#2D6A4F" delay={4} style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1 }} />
+
+        {/* ── 3D canvas ── */}
+        <div className="absolute inset-0 z-[2] opacity-50 pointer-events-auto mix-blend-luminosity">
+          <Hero3D />
+        </div>
+
+        {/* ── Hero copy ── */}
+        <motion.div
+          style={{ y: heroY, opacity: heroOpacity }}
+          className="relative z-[10] max-w-7xl mx-auto px-6 text-center pointer-events-none"
+        >
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="show"
+            className="pointer-events-auto"
+          >
+            {/* Festival badge */}
+            <motion.div variants={slideUp} className="inline-flex items-center gap-3 mb-10">
+              <div
+                className="flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-[0.3em] border text-amber-300 border-amber-500/40"
+                style={{ background: 'rgba(212,175,55,0.08)', backdropFilter: 'blur(16px)' }}
               >
-                Join the ALX Community <ExternalLink size={16} />
-              </button>
-            </div>
-            
-            <div className="order-1 lg:order-2 relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-pink-500 to-purple-600 rounded-2xl transform rotate-2 scale-105 opacity-20 group-hover:rotate-1 transition duration-500"></div>
-              <div className="relative rounded-2xl overflow-hidden shadow-lg border-4 border-white aspect-video bg-black">
-                 {/* Video Player: Uses video tag for local files to ensure playback */}
-                 <video 
-                    width="100%" 
-                    height="100%" 
-                    src="/alx_vid.mp4" 
-                    title="ALX Vision Video"
-                    controls
-                    className="w-full h-full object-cover"
-                 >
-                    Your browser does not support the video tag.
-                 </video>
+                <Sparkles size={13} className="text-amber-400" />
+                Festival 2026 — Now Open
               </div>
+            </motion.div>
+
+            {/* Oversized layered headline */}
+            <div className="relative mb-4 leading-none">
+              {/* Behind text — decorative stroke lettering */}
+              <motion.h1
+                variants={fadeIn}
+                className="absolute inset-0 flex items-center justify-center text-[7rem] md:text-[14rem] font-black tracking-tighter select-none pointer-events-none"
+                style={{
+                  WebkitTextStroke: '1px rgba(212,175,55,0.12)',
+                  color: 'transparent',
+                  zIndex: 0,
+                  lineHeight: 0.85,
+                }}
+              >
+                AFRICA
+              </motion.h1>
+              <motion.h1
+                variants={slideUp}
+                className="relative z-10 text-[7rem] md:text-[14rem] font-black tracking-tighter text-white mix-blend-overlay"
+                style={{ lineHeight: 0.85 }}
+              >
+                AFRICA
+              </motion.h1>
             </div>
+
+            <motion.h2
+              variants={slideUp}
+              className="text-[3.5rem] md:text-[7.5rem] font-black tracking-tighter leading-[0.9] mb-6"
+              style={{
+                background: 'linear-gradient(135deg, #D4AF37 0%, #F9A12E 35%, #E63946 65%, #9B1D20 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                filter: 'drop-shadow(0 0 60px rgba(212,175,55,0.3))',
+              }}
+            >
+              UNTAPPED
+              <br />
+              <span className="italic" style={{ fontWeight: 800 }}>TALENT</span>
+            </motion.h2>
+
+            <motion.p
+              variants={slideUp}
+              className="text-white/60 text-xl md:text-2xl font-light max-w-xl mx-auto mb-14 leading-relaxed"
+            >
+              The premier digital stage for Africa's storytellers, designers & innovators.
+            </motion.p>
+
+            {/* CTA buttons */}
+            <motion.div
+              variants={slideUp}
+              className="flex flex-col sm:flex-row items-center justify-center gap-6"
+            >
+              <MagneticButton onClick={() => navigate('submit')} variant="amber">
+                <span
+                  style={{
+                    background: 'linear-gradient(135deg, #D4AF37, #F9A12E)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  Submit Your Work
+                </span>
+              </MagneticButton>
+              <MagneticButton onClick={() => navigate('gallery')} variant="glass">
+                Explore Showcase <ChevronRight size={18} />
+              </MagneticButton>
+            </motion.div>
+          </motion.div>
+        </motion.div>
+
+        {/* Bottom kente stripe */}
+        <div className="absolute bottom-0 left-0 right-0 z-20">
+          <KenteDivider />
+        </div>
+
+        {/* Scroll cue */}
+        <motion.div
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20"
+          animate={{ y: [0, 10, 0] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        >
+          <div className="w-6 h-10 border-2 border-amber-400/40 rounded-full flex items-start justify-center p-1.5">
+            <motion.div
+              className="w-1.5 h-2.5 bg-amber-400 rounded-full"
+              animate={{ y: [0, 12, 0], opacity: [1, 0, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            />
           </div>
+        </motion.div>
+      </section>
+
+      {/* ══════════════════════════════════════════════════════════════
+          FRAME 2 — THE SHOWCASE (Editorial gallery)
+      ══════════════════════════════════════════════════════════════ */}
+      <section className="relative bg-[#F5F0E8] overflow-hidden">
+        {/* Top kente */}
+        <KenteDivider />
+
+        {/* Subtle warm grid */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: `
+              linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)
+            `,
+            backgroundSize: '60px 60px',
+          }}
+        />
+
+        <div className="max-w-7xl mx-auto px-6 py-28 relative z-10">
+          {/* Section header */}
+          <RevealSection className="flex flex-col md:flex-row justify-between items-end mb-16 gap-6">
+            <motion.div variants={slideUp} className="max-w-xl">
+              <p className="text-amber-600 font-black text-xs uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+                <span
+                  className="inline-block w-8 h-px"
+                  style={{ background: 'linear-gradient(90deg, #D4AF37, transparent)' }}
+                />
+                Curator's Selection
+              </p>
+              <h2
+                className="text-5xl md:text-7xl font-black leading-[0.9] tracking-tighter"
+                style={{ color: '#1A0F00' }}
+              >
+                This Week's
+                <br />
+                <span
+                  style={{
+                    background: 'linear-gradient(135deg, #9B1D20, #D4AF37)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  Gallery
+                </span>
+              </h2>
+            </motion.div>
+
+            <motion.div variants={slideUp}>
+              <button
+                onClick={() => navigate('gallery')}
+                className="group flex items-center gap-3 text-gray-900 font-black text-lg border-b-2 border-gray-900 pb-1 hover:text-amber-700 hover:border-amber-700 transition duration-300"
+              >
+                Full Exhibition
+                <ChevronRight
+                  size={20}
+                  className="group-hover:translate-x-2 transition-transform"
+                />
+              </button>
+            </motion.div>
+          </RevealSection>
+
+          {/* Asymmetric masonry grid */}
+          <RevealSection className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            {featuredProjects.map((project, index) => (
+              <FeaturedCard
+                key={project.id}
+                project={project}
+                index={index}
+                onClick={(p) => navigate('project', p)}
+              />
+            ))}
+          </RevealSection>
+        </div>
+
+        <KenteDivider />
+      </section>
+
+      {/* ══════════════════════════════════════════════════════════════
+          FRAME 3 — THE VISION
+      ══════════════════════════════════════════════════════════════ */}
+      <section className="relative bg-[#0F0702] overflow-hidden py-28">
+        {/* Grain texture */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-30"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23noise)' opacity='0.4'/%3E%3C/svg%3E")`,
+          }}
+        />
+
+        {/* Gold splash */}
+        <motion.div
+          animate={{ scale: [1, 1.3, 1], opacity: [0.2, 0.4, 0.2] }}
+          transition={{ duration: 8, repeat: Infinity }}
+          className="absolute top-1/2 left-0 -translate-y-1/2 w-[500px] h-[500px] rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #D4AF37 0%, transparent 65%)', filter: 'blur(80px)' }}
+        />
+
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+          <RevealSection className="grid lg:grid-cols-2 gap-20 items-center">
+            {/* Left copy */}
+            <div className="space-y-8">
+              <motion.div variants={slideUp}>
+                <span className="inline-flex items-center gap-2 text-amber-400 font-black uppercase tracking-[0.25em] text-xs">
+                  <Zap size={14} /> The Vision
+                </span>
+              </motion.div>
+
+              <motion.h2
+                variants={slideUp}
+                className="text-5xl md:text-6xl font-black leading-[1.05] tracking-tight"
+                style={{ color: '#F5F0E8' }}
+              >
+                Your Creativity.
+                <br />
+                Our Platform.
+                <br />
+                <span
+                  style={{
+                    background: 'linear-gradient(135deg, #D4AF37 0%, #F9A12E 50%, #E63946 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  Africa's Future.
+                </span>
+              </motion.h2>
+
+              <motion.p
+                variants={slideUp}
+                className="text-lg leading-relaxed font-light max-w-lg"
+                style={{ color: 'rgba(245,240,232,0.6)' }}
+              >
+                We believe talent is equally distributed, but opportunity is not. ALX bridges that gap
+                — empowering the next generation of creative leaders with skills, network, and stage.
+              </motion.p>
+
+              <motion.button
+                variants={slideUp}
+                onClick={() => window.open('https://www.alxafrica.com', '_blank')}
+                className="inline-flex items-center gap-3 font-black text-lg transition pb-1.5 border-b-2"
+                style={{ color: '#D4AF37', borderColor: '#D4AF37' }}
+                whileHover={{ color: '#F9A12E', borderColor: '#F9A12E' }}
+              >
+                Join the ALX Community <ExternalLink size={18} />
+              </motion.button>
+            </div>
+
+            {/* Right — video card */}
+            <motion.div variants={slideUp} className="relative group">
+              {/* Decorative rotated bg */}
+              <motion.div
+                className="absolute inset-0 rounded-[2rem]"
+                style={{
+                  background: 'linear-gradient(135deg, #D4AF37 0%, #9B1D20 100%)',
+                  transform: 'rotate(3deg) scale(1.04)',
+                  opacity: 0.4,
+                  zIndex: 0,
+                }}
+                whileHover={{ transform: 'rotate(1.5deg) scale(1.04)' }}
+                transition={{ duration: 0.6 }}
+              />
+              <div
+                className="relative z-10 rounded-[2rem] overflow-hidden border-4 aspect-video bg-black"
+                style={{ borderColor: 'rgba(212,175,55,0.3)' }}
+              >
+                <video
+                  src="/alx_vid.mp4"
+                  controls
+                  className="w-full h-full object-cover"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+            </motion.div>
+          </RevealSection>
         </div>
       </section>
 
-      {/* Featured Section */}
-      <section className="py-24 max-w-7xl mx-auto px-4">
-        <div className="flex justify-between items-end mb-12">
-          <div>
-            <h2 className="text-4xl font-bold mb-3">Curator's Picks</h2>
-            <p className="text-gray-500 text-lg">Highlights from this week's top submissions.</p>
-          </div>
-          <button onClick={() => navigate('gallery')} className="hidden md:flex items-center gap-2 text-purple-600 font-bold hover:text-purple-700 transition group">
-            View All <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-          </button>
-        </div>
+      {/* ══════════════════════════════════════════════════════════════
+          FRAME 4 — STATS (Kente-accented dark panel)
+      ══════════════════════════════════════════════════════════════ */}
+      <section className="relative bg-[#0F0702] overflow-hidden pb-28">
+        <KenteDivider />
 
-        <div className="grid md:grid-cols-3 gap-10">
-          {featuredProjects.map((project, index) => (
-            <div 
-              key={project.id} 
-              onClick={() => navigate('project', project)}
-              className="group cursor-pointer"
-              style={{ animationDelay: `${index * 150}ms` }}
-            >
-              <div className="relative aspect-[4/3] rounded-3xl overflow-hidden mb-6 shadow-lg group-hover:shadow-2xl transition-all duration-500 transform group-hover:-translate-y-2">
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"></div>
-                <img 
-                  src={project.image} 
-                  alt={project.title} 
-                  className="w-full h-full object-cover group-hover:scale-110 transition duration-700"
-                />
-                <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-4 py-1.5 rounded-full text-xs font-bold z-20 shadow-sm uppercase tracking-wide">
-                  {project.category}
-                </div>
-              </div>
-              <h3 className="text-2xl font-bold group-hover:text-purple-600 transition-colors mb-2 leading-tight">{project.title}</h3>
-              <p className="text-sm text-gray-500 font-medium">{project.creator} • {project.program}</p>
-            </div>
+        {/* Pan-African colour strips as vertical pillars */}
+        <div className="absolute bottom-0 left-0 right-0 flex h-full pointer-events-none opacity-5">
+          {['#D4AF37', '#2D6A4F', '#D62828'].map((c, i) => (
+            <div
+              key={i}
+              className="flex-1"
+              style={{ borderRight: i < 2 ? `1px solid ${c}` : 'none' }}
+            />
           ))}
         </div>
-      </section>
 
-      {/* Stats / Proof */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-black/95 z-0"></div>
-        <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-bl from-purple-900/30 to-transparent z-0"></div>
-        
-        <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-12 text-center relative z-10 text-white">
-          <div className="p-6 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition duration-300">
-            <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 mb-3">1.2k+</div>
-            <div className="text-sm text-gray-400 font-medium uppercase tracking-widest">Creators</div>
-          </div>
-          <div className="p-6 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition duration-300">
-            <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-300 mb-3">35</div>
-            <div className="text-sm text-gray-400 font-medium uppercase tracking-widest">Countries</div>
-          </div>
-          <div className="p-6 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition duration-300">
-            <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-300 mb-3">500+</div>
-            <div className="text-sm text-gray-400 font-medium uppercase tracking-widest">Internships</div>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-// --- VIEW: Gallery ---
-function GalleryView({ navigate, projects }) {
-  const [filter, setFilter] = useState('All');
-  const filters = ['All', 'Video', 'Visual', 'Audio', 'Writing'];
-
-  const filteredProjects = filter === 'All' 
-    ? projects 
-    : projects.filter(p => p.category === filter);
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-16 animate-fade-in">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8">
-        <div>
-          <h1 className="text-5xl font-black mb-4 tracking-tight">The Showcase</h1>
-          <p className="text-gray-600 text-lg">Browse groundbreaking work from across the continent.</p>
-        </div>
-        
-        {/* Filters */}
-        <div className="flex flex-wrap gap-3">
-          {filters.map(f => {
-            // Calculate count for this filter
-            const count = f === 'All' 
-              ? projects.length 
-              : projects.filter(p => p.category === f).length;
-              
-            const isActive = filter === f;
-            
-            return (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-300 flex items-center gap-2 border ${
-                  isActive 
-                    ? 'bg-gray-900 text-white border-gray-900 shadow-lg scale-105' 
-                    : 'bg-white/60 backdrop-blur-sm text-gray-600 border-white hover:bg-white hover:shadow-md'
-                }`}
+        <div className="max-w-7xl mx-auto px-6 pt-24 relative z-10">
+          <RevealSection className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { value: '1200', suffix: '+', label: 'Creators Showcased', color: '#D4AF37', ramp: 'from-amber-400 to-yellow-300' },
+              { value: '35', suffix: '', label: 'Countries Represented', color: '#2D6A4F', ramp: 'from-emerald-400 to-teal-300' },
+              { value: '500', suffix: '+', label: 'Industry Internships', color: '#E63946', ramp: 'from-rose-400 to-orange-300' },
+            ].map(({ value, suffix, label, ramp }, i) => (
+              <motion.div
+                key={i}
+                variants={slideUp}
+                className="relative overflow-hidden rounded-[2rem] p-10 text-center cursor-default group"
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  backdropFilter: 'blur(8px)',
+                }}
+                whileHover={{ background: 'rgba(255,255,255,0.06)' }}
               >
-                {f}
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                   isActive ? 'bg-white/20' : 'bg-gray-200/70 text-gray-500'
-                }`}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+                {/* Glowing radial on hover */}
+                <motion.div
+                  className="absolute inset-0 rounded-[2rem] pointer-events-none opacity-0 group-hover:opacity-100 transition duration-700"
+                  style={{
+                    background: `radial-gradient(circle at center, rgba(212,175,55,0.1) 0%, transparent 70%)`,
+                  }}
+                />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
-        {filteredProjects.map((project, index) => (
-          <div 
-            key={project.id}
-            onClick={() => navigate('project', project)}
-            className="group glass-panel rounded-3xl overflow-hidden hover:shadow-2xl transition duration-500 cursor-pointer flex flex-col h-full hover:-translate-y-2 border-0"
-            style={{ animationDelay: `${index * 100}ms` }}
-          >
-            {/* Thumbnail */}
-            <div className="relative aspect-video overflow-hidden bg-gray-100">
-               <img 
-                 src={project.image} 
-                 alt={project.title} 
-                 className="w-full h-full object-cover group-hover:scale-110 transition duration-700"
-               />
-               <div className="absolute inset-0 bg-black/20 group-hover:bg-black/0 transition duration-500"></div>
-               <div className="absolute top-4 right-4 bg-white/30 backdrop-blur-md border border-white/20 text-white p-2.5 rounded-full shadow-lg">
-                 {project.category === 'Video' && <Play size={18} fill="currentColor" />}
-                 {project.category === 'Audio' && <Music size={18} />}
-                 {project.category === 'Writing' && <FileText size={18} />}
-                 {project.category === 'Visual' && <ImageIcon size={18} />}
-               </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 flex flex-col flex-grow relative bg-white/40">
-              <div className="flex justify-between items-start mb-3">
-                <span className="text-[10px] font-bold text-purple-600 uppercase tracking-widest border border-purple-200 px-2 py-1 rounded bg-purple-50">{project.program}</span>
-                <div className="flex items-center gap-1.5 text-gray-500 text-xs font-medium">
-                  <Heart size={14} fill="currentColor" className="text-pink-500" /> {project.likes}
-                </div>
-              </div>
-              
-              <h3 className="font-bold text-xl mb-2 leading-tight text-gray-900 group-hover:text-purple-700 transition">{project.title}</h3>
-              <p className="text-sm text-gray-600 mb-6">{project.creator}</p>
-              
-              <div className="mt-auto flex items-center gap-2 text-xs text-gray-500 font-medium pt-4 border-t border-gray-200/50">
-                <MapPin size={14} /> {project.city}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      {filteredProjects.length === 0 && (
-        <div className="text-center py-32 glass-panel rounded-3xl mx-auto max-w-2xl">
-          <p className="text-gray-400 text-xl font-light">No projects found in this category yet.</p>
-          <button onClick={() => setFilter('All')} className="text-purple-600 font-bold mt-4 hover:underline">Clear Filters</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- VIEW: Submit Form ---
-function SubmitView({ navigate, onSubmit }) {
-  const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
-    title: '',
-    creator: '',
-    program: 'Graphic Design',
-    city: '',
-    category: 'Visual',
-    description: '',
-    link: ''
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    // Check if the link is a valid URL or just use placeholder for this demo
-    const mediaLink = formData.link || 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&q=80&w=800';
-    
-    // Note: Local files (blob:) will only work for this session on this computer.
-    // To make them permanent, one would need Firebase Storage.
-
-    const newProject = {
-      ...formData,
-      image: mediaLink,
-    };
-    
-    onSubmit(newProject);
-  };
-
-  return (
-    <div className="max-w-3xl mx-auto px-4 py-16 animate-fade-in">
-      <button onClick={() => navigate('home')} className="mb-8 flex items-center gap-2 text-gray-500 hover:text-black transition font-medium group">
-        <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> Back to Home
-      </button>
-
-      <div className="glass-panel rounded-3xl shadow-2xl border-0 overflow-hidden relative">
-        {/* Decorative gradient inside card */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-
-        {/* Progress Bar */}
-        <div className="h-1.5 bg-gray-100/50 flex">
-          <div className={`h-full bg-gradient-to-r from-purple-600 to-pink-500 transition-all duration-500 ease-out ${step === 1 ? 'w-1/2' : 'w-full'}`}></div>
-        </div>
-
-        <div className="p-10 relative z-10">
-          <h1 className="text-3xl font-black mb-2 text-gray-900">Submit Your Work</h1>
-          <p className="text-gray-600 mb-10 text-lg font-light">Share your creativity with the ALX community and hiring partners.</p>
-
-          <form onSubmit={handleSubmit}>
-            {step === 1 ? (
-              <div className="space-y-8 animate-fade-in">
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-bold mb-2 text-gray-700">Full Name</label>
-                    <input 
-                      required
-                      className="w-full bg-white/70 border border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition shadow-sm"
-                      placeholder="e.g. Jane Doe"
-                      value={formData.creator}
-                      onChange={(e) => setFormData({...formData, creator: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold mb-2 text-gray-700">Program</label>
-                    <select 
-                      className="w-full bg-white/70 border border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition shadow-sm appearance-none"
-                      value={formData.program}
-                      onChange={(e) => setFormData({...formData, program: e.target.value})}
-                    >
-                      <option>Content Creation</option>
-                      <option>AI For Creators</option>
-                      <option>Graphic Design</option>
-                      <option>Music and Audio Production</option>
-                      <option>Data Science</option>
-                      <option>Cloud Computing</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold mb-2 text-gray-700">City & Country</label>
-                  <input 
-                    required
-                    className="w-full bg-white/70 border border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition shadow-sm"
-                    placeholder="e.g. Nairobi, Kenya"
-                    value={formData.city}
-                    onChange={(e) => setFormData({...formData, city: e.target.value})}
-                  />
-                </div>
-
-                <button 
-                  type="button" 
-                  onClick={() => setStep(2)}
-                  className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold hover:bg-black transition flex items-center justify-center gap-2 shadow-lg shadow-gray-900/20 hover:shadow-gray-900/40 transform hover:-translate-y-0.5"
+                <div
+                  className={`text-6xl md:text-7xl font-black bg-gradient-to-r ${ramp} bg-clip-text text-transparent mb-3`}
                 >
-                  Next Step <ChevronRight size={18} />
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-8 animate-fade-in">
-                <div>
-                  <label className="block text-sm font-bold mb-2 text-gray-700">Project Title</label>
-                  <input 
-                    required
-                    className="w-full bg-white/70 border border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition shadow-sm"
-                    placeholder="Give your work a catchy title"
-                    value={formData.title}
-                    onChange={(e) => setFormData({...formData, title: e.target.value})}
-                  />
+                  <AnimCounter target={value} suffix={suffix} />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-bold mb-2 text-gray-700">Category</label>
-                  <div className="flex gap-3">
-                    {['Visual', 'Video', 'Audio', 'Writing'].map(type => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => setFormData({...formData, category: type})}
-                        className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all ${
-                          formData.category === type 
-                            ? 'bg-purple-100 border-purple-200 text-purple-700 shadow-inner' 
-                            : 'bg-white/50 border-gray-200 hover:bg-white hover:border-gray-300'
-                        }`}
-                      >
-                        {type}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold mb-2 text-gray-700">Media Link / Upload</label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-2xl p-10 text-center bg-white/40 transition hover:bg-white/60 hover:border-purple-300 group">
-                      <input 
-                        type="file" 
-                        id="file-upload"
-                        className="hidden" 
-                        accept="image/*,video/*"
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file) {
-                            const url = URL.createObjectURL(file);
-                            setFormData({...formData, link: url});
-                          }
-                        }}
-                      />
-                      
-                      <label htmlFor="file-upload" className="cursor-pointer block">
-                        <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition duration-300">
-                          <Upload className="text-purple-600" size={28} />
-                        </div>
-                        <p className="text-base text-gray-700 font-bold hover:text-purple-600 transition">
-                          {formData.link && formData.link.startsWith('blob:') 
-                            ? <span className="text-green-600 flex items-center justify-center gap-2"><CheckCircle size={18}/> File Selected</span> 
-                            : "Click to browse files from your computer"
-                          }
-                        </p>
-                        <p className="text-sm text-gray-400 mt-2">Supports JPG, PNG, MP4</p>
-                      </label>
-
-                      <div className="relative my-6">
-                        <div className="absolute inset-0 flex items-center">
-                          <div className="w-full border-t border-gray-200"></div>
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase font-bold tracking-widest text-gray-400">
-                          <span className="bg-white/50 px-2 rounded">Or paste URL</span>
-                        </div>
-                      </div>
-
-                      <input 
-                        type="text" 
-                        placeholder="Paste URL (YouTube, Behance, Drive, or Public Image URL)" 
-                        className="w-full bg-white border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-                        value={!formData.link?.startsWith('blob:') ? formData.link : ''}
-                        onChange={(e) => setFormData({...formData, link: e.target.value})}
-                      />
-                  </div>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-bold mb-2 text-gray-700">Description</label>
-                    <textarea 
-                      className="w-full bg-white/70 border border-gray-200 rounded-xl p-4 h-32 focus:ring-2 focus:ring-purple-500 outline-none resize-none shadow-sm"
-                      placeholder="Tell us about the inspiration behind this project..."
-                      value={formData.description}
-                      onChange={(e) => setFormData({...formData, description: e.target.value})}
-                    />
-                </div>
-
-                <div className="flex gap-4 pt-4">
-                  <button 
-                    type="button" 
-                    onClick={() => setStep(1)}
-                    className="flex-1 bg-white text-gray-700 py-4 rounded-xl font-bold hover:bg-gray-50 border border-gray-200 transition"
-                  >
-                    Back
-                  </button>
-                  <button 
-                    type="submit" 
-                    className="flex-[2] bg-gradient-to-r from-purple-600 to-pink-600 text-white py-4 rounded-xl font-bold hover:shadow-lg hover:shadow-purple-500/30 transition transform hover:-translate-y-0.5"
-                  >
-                    Submit Project
-                  </button>
-                </div>
-              </div>
-            )}
-          </form>
+                <p className="text-xs font-black uppercase tracking-[0.25em] text-white/40">{label}</p>
+              </motion.div>
+            ))}
+          </RevealSection>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// --- VIEW: Project Details ---
-function ProjectView({ navigate, project }) {
-  if (!project) return null;
-
-  // Helper to check if URL is a YouTube/External link or a local file
-  const isExternalVideo = (url) => url.includes('http') || url.includes('www');
-
-  return (
-    <div className="min-h-screen animate-fade-in">
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        <button onClick={() => navigate('gallery')} className="mb-8 flex items-center gap-2 text-gray-500 hover:text-black font-medium group px-4 py-2 rounded-lg hover:bg-white/50 transition w-fit">
-          <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> Back to Gallery
-        </button>
-
-        <div className="grid lg:grid-cols-3 gap-12">
-          {/* Main Media Column */}
-          <div className="lg:col-span-2">
-            <div className="bg-black rounded-3xl overflow-hidden shadow-2xl mb-10 ring-4 ring-white/30">
-              {/* Dynamic Media Player */}
-              <div className="aspect-video relative flex items-center justify-center bg-gray-900">
-                {project.category === 'Video' && project.videoUrl ? (
-                   isExternalVideo(project.videoUrl) ? (
-                     <iframe 
-                        src={project.videoUrl} 
-                        title={project.title}
-                        className="w-full h-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                        allowFullScreen
-                        referrerPolicy="strict-origin-when-cross-origin"
-                     ></iframe>
-                   ) : (
-                     <video 
-                        src={project.videoUrl} 
-                        className="w-full h-full"
-                        controls
-                        autoPlay={false}
-                     >
-                       Your browser does not support the video tag.
-                     </video>
-                   )
-                ) : (
-                  <>
-                    <img src={project.image} alt={project.title} className="w-full h-full object-contain opacity-90" />
-                    {project.category === 'Audio' && (
-                       <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                         <div className="w-24 h-24 bg-white/10 border border-white/20 backdrop-blur rounded-full flex items-center justify-center animate-pulse">
-                           <Music size={40} className="text-white" />
-                         </div>
-                       </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="prose max-w-none px-2">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                <h1 className="text-4xl md:text-5xl font-black text-gray-900 leading-tight">{project.title}</h1>
-                <div className="flex gap-2">
-                   <button className="bg-white p-3 rounded-full hover:bg-gray-100 transition shadow-sm border border-gray-200 text-gray-600">
-                      <Share2 size={20} />
-                   </button>
-                   <button className="bg-white p-3 rounded-full hover:bg-gray-100 transition shadow-sm border border-gray-200 text-gray-600">
-                      <ExternalLink size={20} />
-                   </button>
-                </div>
-              </div>
-              
-              <div className="glass-panel p-8 rounded-2xl mb-8">
-                <p className="text-gray-700 leading-relaxed text-lg font-light">
-                  {project.description}
-                </p>
-              </div>
-              
-              <div className="flex flex-wrap gap-2">
-                {project.tags.map(tag => (
-                  <span key={tag} className="px-4 py-1.5 bg-white border border-gray-200 rounded-full text-sm text-gray-600 font-bold shadow-sm">#{tag}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Sidebar Info */}
-          <div className="space-y-6">
-            <div className="glass-panel rounded-3xl p-8 shadow-xl">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Created By</h3>
-              <div className="flex items-center gap-5 mb-8">
-                
-                {/* Updated Avatar Logic */}
-                {project.profileImage ? (
-                  <img 
-                    src={project.profileImage} 
-                    alt={project.creator} 
-                    className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md"
-                  />
-                ) : (
-                  <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-3xl border-4 border-white shadow-md">
-                    {project.creator.charAt(0)}
-                  </div>
-                )}
-
-                <div>
-                  <div className="font-bold text-2xl text-gray-900">{project.creator}</div>
-                  <div className="text-purple-600 font-medium">{project.program}</div>
-                  <div className="text-sm text-gray-500 flex items-center gap-1 mt-1 font-medium">
-                    <MapPin size={14} /> {project.city}
-                  </div>
-                </div>
-              </div>
-              <a 
-                href={project.linkedin || "https://www.linkedin.com/"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full text-center bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-black transition shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform duration-200"
-              >
-                View Profile
-              </a>
-            </div>
-
-            <div className="glass-panel rounded-3xl p-8 shadow-xl">
-              <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Engagement</h3>
-                 <span className="bg-pink-100 text-pink-600 text-xs font-bold px-2 py-1 rounded">HOT</span>
-              </div>
-              
-              <div className="flex gap-4">
-                <button className="flex-1 bg-white border border-pink-100 text-pink-600 py-3.5 rounded-xl font-bold hover:bg-pink-50 transition flex items-center justify-center gap-2 group">
-                  <Heart fill="currentColor" className="group-hover:scale-110 transition-transform" /> {project.likes}
-                </button>
-              </div>
-            </div>
-
-             <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
-               <h3 className="font-bold text-xl mb-2 relative z-10">Hire this Talent</h3>
-               <p className="text-blue-100 text-sm mb-6 relative z-10 leading-relaxed">Interested in collaborating with {project.creator} on your next big project?</p>
-               <button className="w-full bg-white text-blue-600 font-bold py-3.5 rounded-xl hover:bg-blue-50 transition shadow-lg relative z-10">
-                 Send Message
-               </button>
-             </div>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }
