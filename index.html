@@ -1,15 +1,60 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/alx-logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0A0704" />
+    <!--
+      THIS IS THE KEY FIX FOR "ZOOMED IN" APPEARANCE.
+      Without this tag, mobile browsers default to a ~980px virtual viewport
+      and scale everything down/up unpredictably.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
     <title>ALX Creative Showcase — Festival 2026</title>
-    <!-- Preconnect for Google Fonts -->
+    <meta name="description" content="The premier digital stage for Africa's storytellers, designers & innovators. Submit and discover creative work from across the continent." />
+    <meta name="theme-color" content="#FF6B35" />
+
+    <!-- Open Graph / Social sharing -->
+    <meta property="og:title" content="ALX Creative Showcase — Festival 2026" />
+    <meta property="og:description" content="The premier digital stage for Africa's storytellers, designers & innovators." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://alxcreativeeconomy.github.io/alx-showcase-platform/" />
+    <!-- Replace with your actual OG image once you have one -->
+    <meta property="og:image" content="https://alxcreativeeconomy.github.io/alx-showcase-platform/og-image.jpg" />
+
+    <!-- Favicon — place a favicon.ico or favicon.png in your public folder -->
+    <link rel="icon" type="image/png" href="/alx-showcase-platform/favicon.png" />
+
+    <!-- Preconnect to font CDN for faster load -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Load Syne font — the brand typeface used across the site -->
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Global reset to prevent zoom/overflow issues -->
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      html {
+        font-size: 16px;           /* Prevents browser font-size scaling from zooming layout */
+        -webkit-text-size-adjust: 100%;  /* Prevents iOS auto text zoom */
+        text-size-adjust: 100%;
+        overflow-x: hidden;        /* Prevents horizontal scroll from oversized elements */
+      }
+      body {
+        font-family: 'Syne', system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        overflow-x: hidden;
+        background: #FAFAF8;
+      }
+      #root {
+        overflow-x: hidden;
+      }
+      /* Smooth scrolling except for programmatic scrolls */
+      @media (prefers-reduced-motion: no-preference) {
+        html { scroll-behavior: smooth; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
