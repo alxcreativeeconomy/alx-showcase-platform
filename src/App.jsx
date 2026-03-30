@@ -25,15 +25,229 @@ const C = {
   cream:   '#FFF8F0',
 };
 
+// ─── Base URL for assets (works with Vite's base path on GitHub Pages) ────────
+const BASE = import.meta.env.BASE_URL;
+
 // ─── Fallback image for broken/missing images ─────────────────────────────────
 const FALLBACK_IMG = 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&q=80&w=800';
 
+// ─── Platform detection from URL ──────────────────────────────────────────────
+function detectPlatform(url) {
+  if (!url) return null;
+  const u = url.toLowerCase();
+  if (u.includes('linkedin.com')) return 'LinkedIn';
+  if (u.includes('instagram.com')) return 'Instagram';
+  if (u.includes('x.com') || u.includes('twitter.com')) return 'X';
+  if (u.includes('tiktok.com')) return 'TikTok';
+  if (u.includes('facebook.com') || u.includes('fb.com') || u.includes('fb.watch')) return 'Facebook';
+  if (u.includes('youtube.com') || u.includes('youtu.be')) return 'YouTube';
+  if (u.includes('behance.net')) return 'Behance';
+  return null;
+}
+
+// ─── Convert URLs to embeddable format ────────────────────────────────────────
+function getEmbedUrl(url) {
+  if (!url) return null;
+  // YouTube
+  const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/watch\?v=)([^&\s]+)/);
+  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
+  // TikTok — use oembed approach via blockquote (handled in component)
+  // Instagram, X, LinkedIn, Facebook — use oEmbed or link-out (no reliable free iframe embed)
+  return null;
+}
+
+// ─── Social embed component ──────────────────────────────────────────────────
+// Renders embedded content for supported platforms, or a branded link-out card
+function SocialEmbed({ url, title }) {
+  const platform = detectPlatform(url);
+  const embedUrl = getEmbedUrl(url);
+
+  // YouTube — full iframe embed
+  if (embedUrl && platform === 'YouTube') {
+    return (
+      <iframe src={embedUrl} title={title} className="w-full h-full rounded-xl"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen loading="lazy" />
+    );
+  }
+
+  // TikTok — iframe embed via their embed endpoint
+  if (platform === 'TikTok') {
+    // Extract video ID from various TikTok URL formats
+    const tiktokMatch = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
+    if (tiktokMatch) {
+      return (
+        <iframe src={`https://www.tiktok.com/embed/v2/${tiktokMatch[1]}`}
+          title={title} className="w-full h-full rounded-xl" allowFullScreen loading="lazy"
+          style={{ border:'none' }} />
+      );
+    }
+  }
+
+  // For Instagram, X, LinkedIn, Facebook — these platforms block iframe embedding.
+  // Show a branded "View on Platform" card instead.
+  const platformStyles = {
+    LinkedIn: { color:'#0A66C2', icon:<Linkedin size={28}/>, label:'LinkedIn' },
+    Instagram: { color:'#E1306C', icon:<Instagram size={28}/>, label:'Instagram' },
+    X: { color:'#000000', icon:<ExternalLink size={28}/>, label:'X (Twitter)' },
+    TikTok: { color:'#000000', icon:<Play size={28}/>, label:'TikTok' },
+    Facebook: { color:'#1877F2', icon:<Globe size={28}/>, label:'Facebook' },
+    Behance: { color:'#1769FF', icon:<ExternalLink size={28}/>, label:'Behance' },
+  };
+
+  const ps = platformStyles[platform] || { color:C.orange, icon:<ExternalLink size={28}/>, label:'External Link' };
+
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center gap-6 p-8 text-center"
+      style={{ background:`linear-gradient(135deg, ${ps.color}10, ${ps.color}05)` }}>
+      <div className="w-20 h-20 rounded-full flex items-center justify-center shadow-lg"
+        style={{ background: ps.color, color: 'white' }}>
+        {ps.icon}
+      </div>
+      <div>
+        <p className="text-xs font-black uppercase tracking-[0.2em] mb-2" style={{ color: ps.color }}>{ps.label}</p>
+        <p className="text-sm font-medium mb-6" style={{ color:`${C.dark}60` }}>
+          This content is hosted on {ps.label}. Click below to view the original post.
+        </p>
+      </div>
+      <a href={url.startsWith('http') ? url : 'https://' + url} target="_blank" rel="noopener noreferrer"
+        className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full font-black text-white shadow-lg transition hover:opacity-90 hover:scale-105"
+        style={{ background: ps.color }}>
+        View on {ps.label} <ExternalLink size={16}/>
+      </a>
+    </div>
+  );
+}
+
+// ─── Google Sheets submission logger ──────────────────────────────────────────
+// HOW TO SET UP:
+// 1. Open Google Sheets → Extensions → Apps Script
+// 2. DELETE the existing code and paste this UPDATED version, then re-deploy:
+//
+//    function doPost(e) {
+//      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+//      var data = e.parameter;
+//      sheet.appendRow([
+//        new Date(),
+//        data.firstName || '',
+//        data.lastName || '',
+//        data.email || '',
+//        data.city || '',
+//        data.alxStatus || '',
+//        data.postLink || '',
+//        data.description || '',
+//        data.linkedin || '',
+//        data.program || '',
+//        data.category || '',
+//        data.title || '',
+//        data.platform || '',
+//      ]);
+//      return ContentService.createTextOutput(
+//        JSON.stringify({ status: 'success' })
+//      ).setMimeType(ContentService.MimeType.JSON);
+//    }
+//
+//    function doGet(e) {
+//      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+//      var data = sheet.getDataRange().getValues();
+//      var headers = data[0];
+//      var rows = [];
+//      for (var i = 1; i < data.length; i++) {
+//        var row = {};
+//        for (var j = 0; j < headers.length; j++) {
+//          row[headers[j]] = data[i][j];
+//        }
+//        rows.push(row);
+//      }
+//      return ContentService.createTextOutput(
+//        JSON.stringify(rows)
+//      ).setMimeType(ContentService.MimeType.JSON);
+//    }
+//
+// 3. Click Deploy → Manage deployments → Edit (pencil icon)
+// 4. Set Version to "New version" and click Deploy
+// 5. The URL stays the same
+
+const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwpbp-UroQ0kjBiBZuEl2JRtuTXhcav5FLeP6jFjJeHWjLRV9Z-p7LV7SNgzThDpj3h/exec';
+
+async function logToGoogleSheets(data) {
+  if (!GOOGLE_SHEETS_URL) {
+    console.warn('Google Sheets URL not configured — submission not logged');
+    return;
+  }
+  try {
+    // Use form-encoded POST — this works reliably with Apps Script + no-cors
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, val]) => formData.append(key, val || ''));
+    await fetch(GOOGLE_SHEETS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: formData,
+    });
+  } catch (e) {
+    console.warn('Failed to log to Google Sheets:', e.message);
+  }
+}
+
+// ─── Fetch saved submissions from Google Sheets on page load ──────────────────
+const CACHE_KEY = 'alx_showcase_submissions';
+const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+async function fetchSubmissionsFromSheet() {
+  if (!GOOGLE_SHEETS_URL) return [];
+
+  // Check cache first
+  try {
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_TTL) {
+        return data;
+      }
+    }
+  } catch { /* sessionStorage not available — continue to fetch */ }
+
+  try {
+    const res = await fetch(GOOGLE_SHEETS_URL);
+    if (!res.ok) return [];
+    const rows = await res.json();
+    const projects = rows.map((row, i) => ({
+      id: 'sheet-' + i,
+      title: row['Title'] || 'Untitled',
+      creator: [row['First Name'], row['Last Name']].filter(Boolean).join(' ') || 'Anonymous',
+      email: row['Email'] || '',
+      program: row['Program'] || '',
+      city: row['Country / City'] || '',
+      category: row['Category'] || 'Visual',
+      description: row['Description'] || '',
+      link: row['Link to Post'] || '',
+      image: row['Link to Post'] || FALLBACK_IMG,
+      linkedin: row['LinkedIn'] || '',
+      alxStatus: row['ALX Status'] || '',
+      likes: 0,
+      tags: [],
+      featured: false,
+      createdAt: row['Submission Date'] ? new Date(row['Submission Date']).getTime() : 0,
+    })).filter(p => p.title && p.title !== 'Untitled');
+
+    // Save to cache
+    try {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data: projects, timestamp: Date.now() }));
+    } catch { /* storage full or unavailable — no problem */ }
+
+    return projects;
+  } catch (e) {
+    console.warn('Failed to fetch from Google Sheets:', e.message);
+    return [];
+  }
+}
+
 // ─── Mock data — use hosted URLs as fallbacks for local images ────────────────
 const INITIAL_PROJECTS = [
-  { id:1, title:"Urban Rhythms: Ghana", creator:"Diana Aidoo.", program:"Content Creation", city:"Accra, Ghana", category:"Video", image:"/dina.png", videoUrl:"/diana.mp4", linkedin:"https://www.linkedin.com/in/diana-aidoo/", profileImage:"/dina.png", description:"Urban Rhythms Ghana is a vibrant visual journey through the streets of Accra, where movement, culture, and sound collide. Captured through the lens of creator Diana Aidoo, the video celebrates Ghana's street dance scene as a powerful form of self-expression, storytelling, and identity.", likes:124, tags:["AfricanDance","Ghana","Culture"], featured:true },
-  { id:2, title:"Generative Lagos: 2050", creator:"Tunde M.", program:"AI for Creators", city:"Lagos, Nigeria", category:"Visual", image:"/Ai.jpeg", linkedin:"https://www.linkedin.com/", profileImage:"https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=200", description:"A series of AI-generated landscapes imagining Lagos in the year 2050. Created using Midjourney and Stable Diffusion, this project explores the intersection of traditional Yoruba architecture and cyberpunk aesthetics.", likes:215, tags:["AI Art","Midjourney","Futurism"], featured:true },
+  { id:1, title:"Urban Rhythms: Ghana", creator:"Diana Aidoo.", program:"Content Creation", city:"Accra, Ghana", category:"Video", image:`${BASE}dina.png`, videoUrl:`${BASE}diana.mp4`, linkedin:"https://www.linkedin.com/in/diana-aidoo/", profileImage:`${BASE}dina.png`, description:"Urban Rhythms Ghana is a vibrant visual journey through the streets of Accra, where movement, culture, and sound collide. Captured through the lens of creator Diana Aidoo, the video celebrates Ghana's street dance scene as a powerful form of self-expression, storytelling, and identity.", likes:124, tags:["AfricanDance","Ghana","Culture"], featured:true },
+  { id:2, title:"Generative Lagos: 2050", creator:"Tunde M.", program:"AI for Creators", city:"Lagos, Nigeria", category:"Visual", image:`${BASE}Ai.jpeg`, linkedin:"https://www.linkedin.com/", profileImage:"https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=200", description:"A series of AI-generated landscapes imagining Lagos in the year 2050. Created using Midjourney and Stable Diffusion, this project explores the intersection of traditional Yoruba architecture and cyberpunk aesthetics.", likes:215, tags:["AI Art","Midjourney","Futurism"], featured:true },
   { id:3, title:"Savannah Coffee Branding", creator:"Layla H.", program:"Graphic Design", city:"Cairo, Egypt", category:"Visual", image:"https://images.unsplash.com/photo-1634128221889-82ed6efebfc3?auto=format&fit=crop&q=80&w=1600", linkedin:"https://www.linkedin.com/", profileImage:"https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200", description:"A complete brand identity and packaging design for an artisanal coffee startup. The visual language uses geometric patterns inspired by Egyptian textiles to create a modern yet rooted look.", likes:143, tags:["Branding","Packaging","Typography"], featured:false },
-  { id:4, title:"Afro-Futurism 3D Concept", creator:"Kofi A.", program:"3D Animation", city:"Accra, Ghana", category:"Visual", image:"/3D.jpeg", linkedin:"https://www.linkedin.com/", description:"Character design and environment modeling for a sci-fi short film set in 2080 Accra. Rendered in Blender using Cycles with custom procedural textures.", likes:210, tags:["Blender","3D","Concept Art"], featured:true },
+  { id:4, title:"Afro-Futurism 3D Concept", creator:"Kofi A.", program:"3D Animation", city:"Accra, Ghana", category:"Visual", image:`${BASE}3D.jpeg`, linkedin:"https://www.linkedin.com/", description:"Character design and environment modeling for a sci-fi short film set in 2080 Accra. Rendered in Blender using Cycles with custom procedural textures.", likes:210, tags:["Blender","3D","Concept Art"], featured:true },
   { id:5, title:"Sounds of the Savannah", creator:"Zola B.", program:"Audio Engineering", city:"Johannesburg, SA", category:"Audio", image:"https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&q=80&w=1600", linkedin:"https://www.linkedin.com/", description:"An immersive audio soundscape recorded across three national parks. Best experienced with noise-cancelling headphones.", likes:45, tags:["Sound Design","Field Recording","Nature"], featured:false }
 ];
 
@@ -102,7 +316,7 @@ const TribalRing = React.memo(({ size, color, delay=0 }) => (
       pointerEvents: 'none',
       top: '50%',
       left: '50%',
-      willChange: 'transform, opacity',
+      willChange: 'auto',
       animation: `tribalPulse ${14+delay}s ease-in-out ${delay}s infinite`,
     }}
   />
@@ -112,14 +326,8 @@ const TribalRing = React.memo(({ size, color, delay=0 }) => (
 // FIX: These were 4-7 separate Framer Motion infinite loops causing constant
 // React re-renders + style recalculations. CSS keyframes run on GPU instead.
 const blobKeyframes = `
-@keyframes blobPulse1 { 0%, 100% { transform: scale(1); opacity: 0.2; } 50% { transform: scale(1.25); opacity: 0.35; } }
-@keyframes blobPulse2 { 0%, 100% { transform: scale(1); opacity: 0.15; } 50% { transform: scale(1.4); opacity: 0.3; } }
-@keyframes blobPulse3 { 0%, 100% { transform: scale(1); opacity: 0.12; } 50% { transform: scale(1.15); opacity: 0.25; } }
-@keyframes blobPulse4 { 0%, 100% { transform: scale(1); opacity: 0.1; } 50% { transform: scale(1.2); opacity: 0.2; } }
 @keyframes scrollBounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(10px); } }
 @keyframes scrollDot { 0%, 100% { transform: translateY(0); opacity: 1; } 50% { transform: translateY(12px); opacity: 0; } }
-@keyframes visionBlob1 { 0%, 100% { transform: translateY(-50%) scale(1); opacity: 0.15; } 50% { transform: translateY(-50%) scale(1.3); opacity: 0.3; } }
-@keyframes visionBlob2 { 0%, 100% { transform: scale(1); opacity: 0.1; } 50% { transform: scale(1.2); opacity: 0.22; } }
 `;
 
 // ─── Inject all CSS keyframes once ────────────────────────────────────────────
@@ -181,7 +389,7 @@ function MagneticButton({ children, onClick, variant='primary', className='' }) 
       onMouseMove={onMove} onMouseLeave={onLeave} whileTap={{ scale:0.95 }} onClick={onClick}
       className={`relative px-10 py-4 rounded-full font-black text-base cursor-pointer overflow-hidden transition-all duration-300 ${s.cls} ${className}`}>
       <motion.span className="absolute inset-0 rounded-full pointer-events-none" initial={{ opacity:0 }} whileHover={{ opacity:1 }}
-        style={{ background:`radial-gradient(circle at center,${s.glow} 0%,transparent 70%)`, filter:'blur(12px)' }}/>
+        style={{ background:`radial-gradient(circle at center,${s.glow} 0%,transparent 70%)` }}/>
       <span className="relative z-10 flex items-center gap-2.5">{children}</span>
     </motion.button>
   );
@@ -209,8 +417,7 @@ function FeaturedCard({ project, index, onClick }) {
       style={{ minHeight: isHero?420:280, background:C.dark, contain:'layout style paint' }}>
       {/* FIX: Use CSS transform for hover zoom instead of Framer Motion whileHover on img */}
       <SafeImage src={project.image} alt={project.title}
-        className="absolute inset-0 w-full h-full object-cover opacity-90 transition-transform duration-700 ease-out group-hover:scale-[1.06]"
-        style={{ willChange:'transform' }}/>
+        className="absolute inset-0 w-full h-full object-cover opacity-90 transition-transform duration-700 ease-out group-hover:scale-[1.06]"/>
       <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.2) 55%, transparent 100%)' }}/>
       {/* Category pill */}
       <div className="absolute top-5 left-5">
@@ -269,9 +476,22 @@ function AnimCounter({ target, suffix='' }) {
 // ══════════════════════════════════════════════════════════════════════════════
 export default function App() {
   const [view, setView] = useState('home');
-  const [projects, setProjects] = useState(INITIAL_PROJECTS); // FIX: Start with data immediately
+  const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [selected, setSelected] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Fetch saved submissions from Google Sheets on page load
+  useEffect(() => {
+    fetchSubmissionsFromSheet().then(sheetProjects => {
+      if (sheetProjects.length > 0) {
+        // Always build the full list from scratch: sheet submissions + hardcoded projects
+        // This prevents duplicates from stale React state
+        const initialTitles = new Set(INITIAL_PROJECTS.map(p => p.title.toLowerCase()));
+        const newFromSheet = sheetProjects.filter(sp => !initialTitles.has(sp.title.toLowerCase()));
+        setProjects([...newFromSheet.reverse(), ...INITIAL_PROJECTS]);
+      }
+    });
+  }, []);
 
   const nav = useCallback((v, p=null) => {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -282,6 +502,24 @@ export default function App() {
 
   const handleSubmit = useCallback((np) => {
     setProjects(p => [{ ...np, createdAt: Date.now(), likes: 0, featured: false }, ...p]);
+    // Clear cache so next refresh fetches fresh data including this submission
+    try { sessionStorage.removeItem(CACHE_KEY); } catch {}
+    // Log to Google Sheets in background (non-blocking)
+    const nameParts = (np.creator || '').trim().split(/\s+/);
+    logToGoogleSheets({
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      email: np.email || '',
+      city: np.city || '',
+      alxStatus: np.alxStatus || '',
+      postLink: np.link || '',
+      description: np.description || '',
+      linkedin: np.linkedin || '',
+      program: np.program || '',
+      category: np.category || '',
+      title: np.title || '',
+      platform: detectPlatform(np.link) || 'Direct Upload',
+    });
     nav('gallery');
   }, [nav]);
 
@@ -296,7 +534,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center gap-3 cursor-pointer group" onClick={() => nav('home')}>
-              <SafeImage src="/alx-logo.png" alt="ALX" className="h-10 w-auto object-contain"/>
+              <SafeImage src={`${BASE}alx-logo.png`} alt="ALX" className="h-10 w-auto object-contain"/>
               <span className="font-black text-xl tracking-tight hidden sm:block" style={{ color:C.dark }}>ALX CREATIVE SHOWCASE</span>
             </div>
             <div className="hidden md:flex items-center gap-8">
@@ -329,7 +567,7 @@ export default function App() {
         <KenteDivider/>
         <div className="max-w-7xl mx-auto px-6 py-16 flex flex-col md:flex-row justify-between gap-12 relative z-10">
           <div className="max-w-sm">
-            <SafeImage src="/alx-logo.png" alt="ALX" className="h-10 mb-5 opacity-80"/>
+            <SafeImage src={`${BASE}alx-logo.png`} alt="ALX" className="h-10 mb-5 opacity-80"/>
             <p className="text-sm leading-relaxed" style={{ color:'rgba(255,255,255,0.5)' }}>Unlocking the next generation of African creative talent through innovation, technology, and art.</p>
           </div>
           <div className="flex flex-col md:items-end gap-5">
@@ -377,20 +615,19 @@ function HomeView({ nav, projects=[] }) {
 
         <div className="absolute inset-0 z-0"><AdinkraPattern/></div>
 
-        {/* FIX: Colour blobs use CSS animations instead of Framer Motion infinite loops */}
-        <div className="absolute -top-20 -left-32 w-[400px] h-[400px] rounded-full pointer-events-none z-0"
-          style={{ background:`radial-gradient(circle,${C.orange} 0%,transparent 65%)`, filter:'blur(70px)', animation:'blobPulse1 8s ease-in-out infinite', willChange:'transform,opacity' }}/>
-        <div className="absolute -bottom-32 -right-32 w-[450px] h-[450px] rounded-full pointer-events-none z-0"
-          style={{ background:`radial-gradient(circle,${C.blue} 0%,transparent 60%)`, filter:'blur(80px)', animation:'blobPulse2 10s ease-in-out 1.5s infinite', willChange:'transform,opacity' }}/>
-        <div className="absolute top-1/3 right-1/4 w-[300px] h-[300px] rounded-full pointer-events-none z-0"
-          style={{ background:`radial-gradient(circle,${C.pink} 0%,transparent 65%)`, filter:'blur(60px)', animation:'blobPulse3 6s ease-in-out 3s infinite', willChange:'transform,opacity' }}/>
-        <div className="absolute bottom-1/3 left-1/4 w-[250px] h-[250px] rounded-full pointer-events-none z-0"
-          style={{ background:`radial-gradient(circle,${C.teal} 0%,transparent 65%)`, filter:'blur(60px)', animation:'blobPulse4 9s ease-in-out 2s infinite', willChange:'transform,opacity' }}/>
+        {/* Colour accents — static pre-blurred gradients, no filter:blur, no animation */}
+        <div className="absolute -top-20 -left-32 w-[500px] h-[500px] rounded-full pointer-events-none z-0 opacity-25"
+          style={{ background:`radial-gradient(circle, ${C.orange} 0%, ${C.orange}40 25%, transparent 65%)` }}/>
+        <div className="absolute -bottom-32 -right-32 w-[550px] h-[550px] rounded-full pointer-events-none z-0 opacity-20"
+          style={{ background:`radial-gradient(circle, ${C.blue} 0%, ${C.blue}30 25%, transparent 60%)` }}/>
+        <div className="absolute top-1/3 right-1/4 w-[350px] h-[350px] rounded-full pointer-events-none z-0 opacity-15"
+          style={{ background:`radial-gradient(circle, ${C.pink} 0%, ${C.pink}30 30%, transparent 65%)` }}/>
+        <div className="absolute bottom-1/3 left-1/4 w-[300px] h-[300px] rounded-full pointer-events-none z-0 opacity-12"
+          style={{ background:`radial-gradient(circle, ${C.teal} 0%, ${C.teal}25 30%, transparent 65%)` }}/>
 
         {/* CSS-animated tribal rings */}
         <TribalRing size={380} color={C.orange} delay={0}/>
         <TribalRing size={520} color={C.blue} delay={2}/>
-        <TribalRing size={660} color={C.pink} delay={4}/>
 
         {/* FIX: Hero3D lazy-loaded + only rendered when in viewport */}
         {heroInView && (
@@ -443,7 +680,7 @@ function HomeView({ nav, projects=[] }) {
 
         {/* Scroll indicator — CSS animation */}
         <div className="absolute bottom-7 left-1/2 z-20"
-          style={{ animation:'scrollBounce 2s ease-in-out infinite', willChange:'transform' }}>
+          style={{ animation:'scrollBounce 2s ease-in-out infinite' }}>
           <div className="w-6 h-10 rounded-full flex items-start justify-center p-1.5" style={{ border:`2px solid ${C.orange}60` }}>
             <div className="w-1.5 h-2.5 rounded-full" style={{ background:C.orange, animation:'scrollDot 2s ease-in-out infinite' }}/>
           </div>
@@ -495,10 +732,10 @@ function HomeView({ nav, projects=[] }) {
         {/* FIX: Removed the noise texture SVG data-URI — it was a large inline SVG being parsed + rendered as a background */}
 
         {/* FIX: Vision blobs use CSS animations */}
-        <div className="absolute top-1/2 left-0 w-[500px] h-[500px] rounded-full pointer-events-none"
-          style={{ background:`radial-gradient(circle,${C.orange} 0%,transparent 65%)`, filter:'blur(80px)', animation:'visionBlob1 8s ease-in-out infinite', willChange:'transform,opacity' }}/>
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] rounded-full pointer-events-none"
-          style={{ background:`radial-gradient(circle,${C.blue} 0%,transparent 65%)`, filter:'blur(70px)', animation:'visionBlob2 10s ease-in-out 2s infinite', willChange:'transform,opacity' }}/>
+        <div className="absolute top-1/2 left-0 -translate-y-1/2 w-[500px] h-[500px] rounded-full pointer-events-none opacity-20"
+          style={{ background:`radial-gradient(circle, ${C.orange} 0%, ${C.orange}30 25%, transparent 65%)` }}/>
+        <div className="absolute top-0 right-0 w-[400px] h-[400px] rounded-full pointer-events-none opacity-15"
+          style={{ background:`radial-gradient(circle, ${C.blue} 0%, ${C.blue}25 25%, transparent 65%)` }}/>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10">
           <RevealSection className="grid lg:grid-cols-2 gap-16 items-center">
@@ -522,7 +759,7 @@ function HomeView({ nav, projects=[] }) {
                 style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})`, zIndex:0 }}/>
               <div className="relative z-10 rounded-3xl overflow-hidden border-4 aspect-video bg-black" style={{ borderColor:'rgba(255,107,53,0.2)' }}>
                 {/* FIX: Added preload="metadata" — don't load entire video until play */}
-                <video src="/alx_vid.mp4" controls preload="metadata" className="w-full h-full object-cover">Your browser does not support video.</video>
+                <video src={`${BASE}alx_vid.mp4`} controls preload="metadata" className="w-full h-full object-cover">Your browser does not support video.</video>
               </div>
             </motion.div>
           </RevealSection>
@@ -541,8 +778,7 @@ function HomeView({ nav, projects=[] }) {
               { value:'500', suffix:'+', label:'Industry Internships', color:C.green, bg:`linear-gradient(135deg,${C.green}15,${C.teal}10)`, border:C.green },
             ].map(({ value, suffix, label, color, bg, border }, i) => (
               <motion.div key={i} variants={SU} className="relative overflow-hidden rounded-3xl p-10 text-center group cursor-default"
-                style={{ background:bg, border:`1px solid ${border}20` }}
-                whileHover={{ scale:1.02 }}>
+                style={{ background:bg, border:`1px solid ${border}20` }}>
                 {/* FIX: Removed dynamic boxShadow from whileHover — triggers paint */}
                 <div className="text-5xl md:text-6xl font-black mb-3" style={{ color }}><AnimCounter target={value} suffix={suffix}/></div>
                 <p className="text-xs font-black uppercase tracking-[0.25em]" style={{ color:`${C.dark}60` }}>{label}</p>
@@ -622,8 +858,7 @@ function GalleryView({ nav, projects=[] }) {
               style={{ background:'white', boxShadow:'0 4px 20px rgba(0,0,0,0.07)', border:'1px solid rgba(0,0,0,0.05)', contain:'layout style' }}>
               <div className="relative aspect-video overflow-hidden bg-gray-100">
                 <SafeImage src={project.image} alt={project.title}
-                  className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
-                  style={{ willChange:'transform' }}/>
+                  className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"/>
                 <div className="absolute top-4 right-4 text-white p-2.5 rounded-full" style={{ background:'rgba(0,0,0,0.35)' }}>
                   {project.category === 'Video' && <Play size={16} fill="currentColor"/>}
                   {project.category === 'Audio' && <Music size={16}/>}
@@ -659,17 +894,22 @@ function GalleryView({ nav, projects=[] }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function SubmitView({ nav, onSubmit }) {
   const [step, setStep] = useState(1);
-  const [fd, setFd] = useState({ title:'', creator:'', program:'Content Creation', city:'', category:'Visual', description:'', link:'', linkedin:'' });
+  const [fd, setFd] = useState({ title:'', creator:'', email:'', program:'Content Creation', city:'', category:'Visual', description:'', link:'', linkedin:'', alxStatus:'Current Learner' });
   const handleSubmit = (e) => {
     e.preventDefault();
     let linkedinUrl = fd.linkedin.trim();
     if (linkedinUrl && !linkedinUrl.startsWith('http://') && !linkedinUrl.startsWith('https://')) {
       linkedinUrl = 'https://' + linkedinUrl;
     }
-    onSubmit({...fd, image:fd.link||FALLBACK_IMG, linkedin:linkedinUrl, id:Date.now(), likes:0, tags:[]});
+    let postLink = fd.link.trim();
+    if (postLink && !postLink.startsWith('http') && !postLink.startsWith('blob:')) {
+      postLink = 'https://' + postLink;
+    }
+    onSubmit({...fd, link:postLink, image:postLink||FALLBACK_IMG, linkedin:linkedinUrl, id:Date.now(), likes:0, tags:[]});
   };
   const inp = "w-full bg-white border rounded-2xl px-5 py-4 focus:outline-none text-base font-medium shadow-sm transition";
   const inpStyle = { borderColor:'rgba(0,0,0,0.1)', color:C.dark };
+  const detectedPlatform = detectPlatform(fd.link);
 
   return (
     <div className="min-h-screen" style={{ background:C.offwhite }}>
@@ -699,9 +939,21 @@ function SubmitView({ nav, onSubmit }) {
                         <input required className={inp} style={inpStyle} placeholder="e.g. Jane Doe" value={fd.creator} onChange={e => setFd({...fd, creator:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                       </div>
                       <div>
+                        <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Email</label>
+                        <input required type="email" className={inp} style={inpStyle} placeholder="jane@example.com" value={fd.email} onChange={e => setFd({...fd, email:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <div>
                         <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Program</label>
                         <select className={inp} style={inpStyle} value={fd.program} onChange={e => setFd({...fd, program:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
                           {['Content Creation','AI For Creators','Graphic Design','Music and Audio Production','Data Science','Cloud Computing'].map(p => <option key={p}>{p}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>ALX Status</label>
+                        <select className={inp} style={inpStyle} value={fd.alxStatus} onChange={e => setFd({...fd, alxStatus:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
+                          {['Current Learner','Alumni','Applicant'].map(s => <option key={s}>{s}</option>)}
                         </select>
                       </div>
                     </div>
@@ -710,7 +962,7 @@ function SubmitView({ nav, onSubmit }) {
                       <input required className={inp} style={inpStyle} placeholder="e.g. Nairobi, Kenya" value={fd.city} onChange={e => setFd({...fd, city:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                     </div>
                     <motion.button whileTap={{ scale:0.97 }}
-                      type="button" onClick={() => { if (fd.creator && fd.city) setStep(2); }}
+                      type="button" onClick={() => { if (fd.creator && fd.city && fd.email) setStep(2); }}
                       className="w-full py-4 rounded-2xl font-black text-white text-lg flex items-center justify-center gap-2 shadow-lg"
                       style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})` }}>
                       Next Step <ChevronRight size={20}/>
@@ -750,12 +1002,19 @@ function SubmitView({ nav, onSubmit }) {
                           </p>
                           <p className="text-xs mt-1" style={{ color:`${C.dark}40` }}>Supports JPG, PNG, MP4</p>
                         </label>
-                        <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor:'rgba(0,0,0,0.08)' }}/></div><div className="relative flex justify-center"><span className="px-4 text-xs uppercase font-black tracking-widest bg-white rounded-full" style={{ color:`${C.dark}40` }}>Or paste URL</span></div></div>
-                        <input type="text" placeholder="Paste URL (YouTube, Behance, Drive, or image URL)"
+                        <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor:'rgba(0,0,0,0.08)' }}/></div><div className="relative flex justify-center"><span className="px-4 text-xs uppercase font-black tracking-widest bg-white rounded-full" style={{ color:`${C.dark}40` }}>Or paste social / media URL</span></div></div>
+                        <input type="text" placeholder="Paste link from LinkedIn, Instagram, TikTok, X, Facebook, YouTube…"
                           className="w-full border rounded-xl p-3.5 text-sm focus:outline-none bg-white shadow-sm"
                           style={{ borderColor:'rgba(0,0,0,0.1)', color:C.dark }}
                           value={!fd.link?.startsWith('blob:') ? fd.link : ''} onChange={e => setFd({...fd, link:e.target.value})}
                           onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                        {detectedPlatform && (
+                          <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl" style={{ background:`${C.teal}10`, border:`1px solid ${C.teal}25` }}>
+                            <CheckCircle size={14} style={{ color:C.teal }}/>
+                            <span className="text-xs font-bold" style={{ color:C.teal }}>Detected: {detectedPlatform}</span>
+                            <span className="text-xs" style={{ color:`${C.dark}40` }}>— will display as embedded content or link card</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div>
@@ -810,16 +1069,30 @@ function ProjectView({ nav, project }) {
           <div className="lg:col-span-2">
             <div className="rounded-3xl overflow-hidden shadow-xl mb-10 bg-gray-950" style={{ border:'1px solid rgba(0,0,0,0.08)' }}>
               <div className="aspect-video relative flex items-center justify-center">
-                {project.category === 'Video' && project.videoUrl ? (
-                  isExt(project.videoUrl)
-                    ? <iframe src={project.videoUrl} title={project.title} className="w-full h-full" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" loading="lazy"/>
-                    : <video src={project.videoUrl} className="w-full h-full" controls preload="metadata"/>
-                ) : (
-                  <>
-                    <SafeImage src={project.image} alt={project.title} className="w-full h-full object-contain"/>
-                    {project.category === 'Audio' && <div className="absolute inset-0 flex items-center justify-center bg-black/50"><div className="w-24 h-24 border rounded-full flex items-center justify-center" style={{ background:`${C.orange}15`, borderColor:`${C.orange}30`, animation:'blobPulse1 3s ease-in-out infinite' }}><Music size={38} style={{ color:C.orange }}/></div></div>}
-                  </>
-                )}
+                {(() => {
+                  const platform = detectPlatform(project.link || project.videoUrl);
+                  const mediaUrl = project.link || project.videoUrl;
+
+                  // Social media link — use embed component
+                  if (platform && mediaUrl) {
+                    return <SocialEmbed url={mediaUrl} title={project.title}/>;
+                  }
+
+                  // Direct video file
+                  if (project.category === 'Video' && project.videoUrl) {
+                    return isExt(project.videoUrl)
+                      ? <iframe src={project.videoUrl} title={project.title} className="w-full h-full" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" loading="lazy"/>
+                      : <video src={project.videoUrl} className="w-full h-full" controls preload="metadata"/>;
+                  }
+
+                  // Image fallback
+                  return (
+                    <>
+                      <SafeImage src={project.image} alt={project.title} className="w-full h-full object-contain"/>
+                      {project.category === 'Audio' && <div className="absolute inset-0 flex items-center justify-center bg-black/50"><div className="w-24 h-24 border rounded-full flex items-center justify-center animate-pulse" style={{ background:`${C.orange}15`, borderColor:`${C.orange}30` }}><Music size={38} style={{ color:C.orange }}/></div></div>}
+                    </>
+                  );
+                })()}
               </div>
             </div>
             <div>
