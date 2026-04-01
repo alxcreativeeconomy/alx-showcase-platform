@@ -12,17 +12,22 @@ const Hero3D = lazy(() => import('./Hero3D'));
 
 
 
-// ─── Colour palette ────────────────────────────────────────────────────────────
+// ─── ALX Brand Palette (V2.26 Brand Guidelines) ──────────────────────────────
 const C = {
-  orange:  '#FF6B35',
-  blue:    '#0066FF',
-  gold:    '#D4AF37',
-  green:   '#2D6A4F',
-  pink:    '#FF3B77',
-  teal:    '#00CC88',
-  dark:    '#0D0D1A',
-  offwhite:'#FAFAF8',
-  cream:   '#FFF8F0',
+  navy:    '#03134F',  // Deep Navy — dominant, headers, logo
+  blue:    '#0452F0',  // Twilight Blue — links, highlights
+  purple:  '#5F3DC4',  // Purple — action/CTA colour
+  green:   '#02B75E',  // Jungle Green — success, live indicators
+  yellow:  '#EAB308',  // Sunflower Yellow — accents, badges
+  black:   '#1C1F2A',  // Black — body text
+  white:   '#FFFFFF',  // Pure White
+  grey:    '#F8F8F8',  // Light grey background
+  icyblue: '#C5E5FF',  // Icy Blue — soft backgrounds
+  lavender:'#E9DBFF',  // Lavender — soft accent
+  palesky: '#EBF6FF',  // Pale Sky — lightest background
+  // Aliases for backward compatibility in the codebase
+  dark:    '#1C1F2A',
+  offwhite:'#F8F8F8',
 };
 
 // ─── Base URL for assets (works with Vite's base path on GitHub Pages) ────────
@@ -95,7 +100,7 @@ function SocialEmbed({ url, title }) {
     Behance: { color:'#1769FF', icon:<ExternalLink size={28}/>, label:'Behance' },
   };
 
-  const ps = platformStyles[platform] || { color:C.orange, icon:<ExternalLink size={28}/>, label:'External Link' };
+  const ps = platformStyles[platform] || { color:C.purple, icon:<ExternalLink size={28}/>, label:'External Link' };
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-6 p-8 text-center"
@@ -267,67 +272,59 @@ function SafeImage({ src, alt, className, style, ...props }) {
   );
 }
 
-// ─── Kente divider ────────────────────────────────────────────────────────────
+// ─── Creative Kente Bar — thicker, more vibrant, with geometric notches ──────
 const KenteDivider = React.memo(() => (
-  <div className="w-full h-2 flex overflow-hidden flex-shrink-0">
-    {[C.orange, C.green, C.pink, C.gold, C.blue, C.teal, C.orange, C.green].map((c,i) => (
-      <div key={i} className="flex-1" style={{ backgroundColor:c }} />
+  <div className="w-full h-3 flex overflow-hidden flex-shrink-0 relative">
+    {[C.navy, C.blue, C.purple, C.green, C.yellow, C.blue, C.purple, C.green, C.navy, C.yellow].map((c,i) => (
+      <div key={i} className="flex-1 relative" style={{ backgroundColor:c }}>
+        {i % 3 === 0 && <div className="absolute inset-0" style={{ background:`repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.15) 3px, rgba(255,255,255,0.15) 6px)` }}/>}
+      </div>
     ))}
   </div>
 ));
 
-// ─── Adinkra pattern — STATIC SVG, no re-renders ─────────────────────────────
-// FIX: Memoize so this never re-renders. The SVG is purely decorative.
-const AdinkraPattern = React.memo(() => (
-  <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg" style={{ opacity:0.06 }}>
-    <defs>
-      <pattern id="adk" x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
-        <rect x="10" y="10" width="60" height="60" fill="none" stroke={C.orange} strokeWidth="1"/>
-        <rect x="22" y="22" width="36" height="36" fill="none" stroke={C.blue} strokeWidth="0.6"/>
-        <circle cx="40" cy="40" r="9" fill="none" stroke={C.gold} strokeWidth="1"/>
-        <line x1="10" y1="10" x2="70" y2="70" stroke={C.orange} strokeWidth="0.5"/>
-        <line x1="70" y1="10" x2="10" y2="70" stroke={C.orange} strokeWidth="0.5"/>
-        {[[10,10],[70,10],[10,70],[70,70]].map(([cx,cy],i) => <circle key={i} cx={cx} cy={cy} r="2.5" fill={C.gold}/>)}
-        {[[40,10],[40,70],[10,40],[70,40]].map(([cx,cy],i) => <circle key={i} cx={cx} cy={cy} r="1.5" fill={C.blue}/>)}
-      </pattern>
-    </defs>
-    <rect width="100%" height="100%" fill="url(#adk)"/>
+// ─── Paint Splash SVG — organic creative energy ──────────────────────────────
+const PaintSplash = React.memo(({ color, size=200, style={}, className='' }) => (
+  <svg viewBox="0 0 200 200" className={`absolute pointer-events-none ${className}`}
+    style={{ width:size, height:size, ...style }} xmlns="http://www.w3.org/2000/svg">
+    <path d="M100,20 Q140,10 160,50 Q180,90 150,120 Q170,140 140,170 Q110,190 80,170 Q50,190 30,160 Q10,130 40,100 Q20,70 50,50 Q70,20 100,20Z"
+      fill={color} opacity="0.12"/>
+    <circle cx="155" cy="35" r="8" fill={color} opacity="0.18"/>
+    <circle cx="35" cy="155" r="5" fill={color} opacity="0.15"/>
+    <circle cx="170" cy="140" r="4" fill={color} opacity="0.2"/>
   </svg>
 ));
 
-// ─── Tribal ring — CSS animation instead of Framer Motion ─────────────────────
-// FIX: Replace Framer Motion infinite JS animation with pure CSS.
-// CSS animations run on the compositor thread and don't cause main-thread jank.
-const tribalRingKeyframes = `
-@keyframes tribalPulse {
-  0%, 100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 0.08; }
-  50% { transform: translate(-50%, -50%) scale(1.12) rotate(30deg); opacity: 0.18; }
-}
-`;
-
-const TribalRing = React.memo(({ size, color, delay=0 }) => (
-  <div
-    style={{
-      width: size,
-      height: size,
-      borderRadius: '50%',
-      border: `1.5px solid ${color}`,
-      position: 'absolute',
-      pointerEvents: 'none',
-      top: '50%',
-      left: '50%',
-      willChange: 'auto',
-      animation: `tribalPulse ${14+delay}s ease-in-out ${delay}s infinite`,
-    }}
-  />
+// ─── Geometric Shapes — floating creative elements ───────────────────────────
+const GeoShapes = React.memo(({ className='' }) => (
+  <svg viewBox="0 0 800 600" className={`absolute inset-0 w-full h-full pointer-events-none ${className}`} xmlns="http://www.w3.org/2000/svg" style={{ opacity:0.06 }}>
+    {/* Scattered X marks (ALX brand motif) */}
+    <g stroke={C.navy} strokeWidth="2" fill="none" opacity="0.5">
+      <g transform="translate(100,80) rotate(15)"><line x1="-12" y1="-12" x2="12" y2="12"/><line x1="12" y1="-12" x2="-12" y2="12"/></g>
+      <g transform="translate(650,120) rotate(-10)"><line x1="-8" y1="-8" x2="8" y2="8"/><line x1="8" y1="-8" x2="-8" y2="8"/></g>
+      <g transform="translate(300,450) rotate(25)"><line x1="-10" y1="-10" x2="10" y2="10"/><line x1="10" y1="-10" x2="-10" y2="10"/></g>
+      <g transform="translate(720,380) rotate(-20)"><line x1="-6" y1="-6" x2="6" y2="6"/><line x1="6" y1="-6" x2="-6" y2="6"/></g>
+    </g>
+    {/* Circles and dots */}
+    <circle cx="200" cy="200" r="40" fill="none" stroke={C.blue} strokeWidth="1" opacity="0.4"/>
+    <circle cx="600" cy="350" r="25" fill="none" stroke={C.purple} strokeWidth="1" opacity="0.3"/>
+    <circle cx="500" cy="100" r="3" fill={C.green} opacity="0.6"/>
+    <circle cx="150" cy="400" r="3" fill={C.yellow} opacity="0.6"/>
+    <circle cx="700" cy="200" r="2" fill={C.purple} opacity="0.5"/>
+    {/* Triangles */}
+    <polygon points="400,50 420,90 380,90" fill="none" stroke={C.yellow} strokeWidth="1" opacity="0.35"/>
+    <polygon points="100,350 120,380 80,380" fill="none" stroke={C.green} strokeWidth="1" opacity="0.3"/>
+    {/* Diagonal lines */}
+    <line x1="0" y1="500" x2="250" y2="350" stroke={C.blue} strokeWidth="0.5" opacity="0.2" strokeDasharray="4 8"/>
+    <line x1="550" y1="0" x2="800" y2="200" stroke={C.purple} strokeWidth="0.5" opacity="0.2" strokeDasharray="4 8"/>
+  </svg>
 ));
 
-// ─── Colour blob — CSS animation instead of Framer Motion ─────────────────────
-// FIX: These were 4-7 separate Framer Motion infinite loops causing constant
-// React re-renders + style recalculations. CSS keyframes run on GPU instead.
-const blobKeyframes = `
+// ─── Grain Texture Overlay — adds creative depth ─────────────────────────────
+const grainCSS = `
 @keyframes scrollBounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(10px); } }
 @keyframes scrollDot { 0%, 100% { transform: translateY(0); opacity: 1; } 50% { transform: translateY(12px); opacity: 0; } }
+@keyframes float { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
 `;
 
 // ─── Inject all CSS keyframes once ────────────────────────────────────────────
@@ -336,7 +333,7 @@ if (typeof document !== 'undefined') {
   if (!document.getElementById(styleId)) {
     const style = document.createElement('style');
     style.id = styleId;
-    style.textContent = tribalRingKeyframes + blobKeyframes;
+    style.textContent = grainCSS;
     document.head.appendChild(style);
   }
 }
@@ -379,8 +376,8 @@ function useMagnetic(s=0.25) {
 function MagneticButton({ children, onClick, variant='primary', className='' }) {
   const { ref, sx, sy, onMove, onLeave } = useMagnetic();
   const v = {
-    primary: { bg:`linear-gradient(135deg,${C.orange},${C.pink})`, cls:'text-white border-0 shadow-lg', glow:`rgba(255,107,53,0.35)` },
-    secondary: { bg:`linear-gradient(135deg,${C.blue},${C.teal})`, cls:'text-white border-0 shadow-lg', glow:`rgba(0,102,255,0.3)` },
+    primary: { bg:`linear-gradient(135deg,${C.purple},${C.blue})`, cls:'text-white border-0 shadow-lg', glow:`rgba(95,61,196,0.35)` },
+    secondary: { bg:`linear-gradient(135deg,${C.blue},${C.green})`, cls:'text-white border-0 shadow-lg', glow:`rgba(0,102,255,0.3)` },
     outline: { bg:'transparent', cls:`text-gray-900 border-2`, glow:`rgba(0,0,0,0.08)`, border:`2px solid ${C.dark}` },
   };
   const s = v[variant] || v.primary;
@@ -422,7 +419,7 @@ function FeaturedCard({ project, index, onClick }) {
       {/* Category pill */}
       <div className="absolute top-5 left-5">
         <span className="inline-flex items-center gap-1.5 text-white text-xs font-black px-4 py-2 rounded-full uppercase tracking-widest shadow-lg"
-          style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})` }}>
+          style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
           {project.category==='Video'&&<Play size={9} fill="currentColor"/>}{project.category}
         </span>
       </div>
@@ -430,11 +427,11 @@ function FeaturedCard({ project, index, onClick }) {
       <div className="absolute top-5 right-5 flex items-center gap-1.5 text-white text-sm font-bold px-3 py-2 rounded-full"
         style={{ background:'rgba(0,0,0,0.4)' }}>
         {/* FIX: Removed backdrop-blur from small elements — expensive for tiny visual gain */}
-        <Heart size={13} fill="currentColor" className="text-pink-400"/>{project.likes}
+        <Heart size={13} fill="currentColor" className="text-blue-400"/>{project.likes}
       </div>
       {/* Bottom info */}
       <div className="absolute bottom-0 left-0 right-0 p-7">
-        <p className="text-xs font-black uppercase tracking-[0.2em] mb-2" style={{ color:C.teal }}>{project.program}</p>
+        <p className="text-xs font-black uppercase tracking-[0.2em] mb-2" style={{ color:C.green }}>{project.program}</p>
         <h3 className={`text-white font-black leading-tight mb-2 ${isHero?'text-3xl md:text-4xl':'text-xl md:text-2xl'}`}>{project.title}</h3>
         <div className="flex items-center justify-between">
           <p className="text-white/70">{project.creator}</p>
@@ -515,6 +512,8 @@ export default function App() {
       postLink: np.link || '',
       description: np.description || '',
       linkedin: np.linkedin || '',
+      tiktok: np.tiktok || '',
+      instagram: np.instagram || '',
       program: np.program || '',
       category: np.category || '',
       title: np.title || '',
@@ -524,7 +523,7 @@ export default function App() {
   }, [nav]);
 
   return (
-    <div className="min-h-screen overflow-x-hidden" style={{ fontFamily:"'Syne',system-ui,sans-serif", background:C.offwhite, color:C.dark }}>
+    <div className="min-h-screen overflow-x-hidden" style={{ fontFamily:"'Poppins',system-ui,sans-serif", background:C.offwhite, color:C.dark }}>
 
       {/* ── NAV ─────────────────────────────────────────────────────── */}
       {/* FIX: Removed backdrop-blur from nav on mobile — huge perf win on low-end devices */}
@@ -550,7 +549,7 @@ export default function App() {
           <motion.div initial={{ opacity:0, y:-8 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.2 }}
             className="md:hidden border-t px-4 py-4 space-y-3" style={{ background:'rgba(250,250,248,0.98)', borderColor:'rgba(0,0,0,0.07)' }}>
             <button onClick={() => nav('gallery')} className="block w-full text-left font-black p-3 rounded-xl hover:bg-gray-50 transition text-sm uppercase tracking-wide">Gallery</button>
-            <button onClick={() => nav('submit')} className="block w-full text-left font-black p-3 rounded-xl text-white text-sm" style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})` }}>Submit Work</button>
+            <button onClick={() => nav('submit')} className="block w-full text-left font-black p-3 rounded-xl text-white text-sm" style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>Submit Work</button>
           </motion.div>
         )}
       </motion.nav>
@@ -563,20 +562,23 @@ export default function App() {
       </main>
 
       {/* ── FOOTER ──────────────────────────────────────────────────── */}
-      <footer style={{ background:C.dark, color:'white' }} className="relative overflow-hidden">
+      <footer style={{ background:C.navy, color:'white' }} className="relative overflow-hidden">
         <KenteDivider/>
+        {/* Creative accent splashes */}
+        <PaintSplash color={C.purple} size={200} style={{ bottom:'-5%', right:'5%', transform:'rotate(45deg)' }} className="opacity-20"/>
+        <PaintSplash color={C.blue} size={150} style={{ top:'10%', left:'3%', transform:'rotate(-30deg)' }} className="opacity-15"/>
         <div className="max-w-7xl mx-auto px-6 py-16 flex flex-col md:flex-row justify-between gap-12 relative z-10">
           <div className="max-w-sm">
             <SafeImage src={`${BASE}alx-logo.png`} alt="ALX" className="h-10 mb-5 opacity-80"/>
             <p className="text-sm leading-relaxed" style={{ color:'rgba(255,255,255,0.5)' }}>Unlocking the next generation of African creative talent through innovation, technology, and art.</p>
           </div>
           <div className="flex flex-col md:items-end gap-5">
-            <h4 className="font-black text-lg" style={{ color:C.orange }}>Connect</h4>
+            <h4 className="font-black text-lg" style={{ color:C.purple }}>Connect</h4>
             <div className="flex gap-3">
               {[
-                { href:'https://www.linkedin.com/school/alx-africa/', icon:<Linkedin size={18}/>, hoverBg:'#0A66C2' },
-                { href:'https://www.instagram.com/alx_africa/', icon:<Instagram size={18}/>, hoverBg:C.pink },
-                { href:'https://www.alxafrica.com', icon:<Globe size={18}/>, hoverBg:C.teal },
+                { href:'https://www.linkedin.com/school/alx-africa/', icon:<Linkedin size={18}/>, hoverBg:C.blue },
+                { href:'https://www.instagram.com/alx_africa/', icon:<Instagram size={18}/>, hoverBg:C.blue },
+                { href:'https://www.alxafrica.com', icon:<Globe size={18}/>, hoverBg:C.green },
               ].map(({ href, icon, hoverBg }, i) => (
                 <a key={i} href={href} target="_blank" rel="noopener noreferrer"
                   className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110"
@@ -609,25 +611,85 @@ function HomeView({ nav, projects=[] }) {
   return (
     <div>
 
-      {/* FRAME 1 — ENTRANCE */}
+      {/* FRAME 1 — ENTRANCE — Creative Studio Aesthetic */}
       <section ref={heroRef} className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden pt-20"
-        style={{ background:`linear-gradient(160deg, ${C.offwhite} 0%, #FFF5EE 40%, #F0F4FF 100%)` }}>
+        style={{ background:`linear-gradient(160deg, #FFFFFF 0%, ${C.palesky} 50%, ${C.lavender}40 100%)` }}>
 
-        <div className="absolute inset-0 z-0"><AdinkraPattern/></div>
+        {/* Geometric background shapes */}
+        <div className="absolute inset-0 z-0"><GeoShapes/></div>
 
-        {/* Colour accents — static pre-blurred gradients, no filter:blur, no animation */}
-        <div className="absolute -top-20 -left-32 w-[500px] h-[500px] rounded-full pointer-events-none z-0 opacity-25"
-          style={{ background:`radial-gradient(circle, ${C.orange} 0%, ${C.orange}40 25%, transparent 65%)` }}/>
-        <div className="absolute -bottom-32 -right-32 w-[550px] h-[550px] rounded-full pointer-events-none z-0 opacity-20"
-          style={{ background:`radial-gradient(circle, ${C.blue} 0%, ${C.blue}30 25%, transparent 60%)` }}/>
-        <div className="absolute top-1/3 right-1/4 w-[350px] h-[350px] rounded-full pointer-events-none z-0 opacity-15"
-          style={{ background:`radial-gradient(circle, ${C.pink} 0%, ${C.pink}30 30%, transparent 65%)` }}/>
-        <div className="absolute bottom-1/3 left-1/4 w-[300px] h-[300px] rounded-full pointer-events-none z-0 opacity-12"
-          style={{ background:`radial-gradient(circle, ${C.teal} 0%, ${C.teal}25 30%, transparent 65%)` }}/>
+        {/* Paint splashes — vibrant creative energy */}
+        <PaintSplash color={C.purple} size={450} style={{ top:'-5%', left:'-8%' }}/>
+        <PaintSplash color={C.blue} size={400} style={{ bottom:'-10%', right:'-5%', transform:'rotate(120deg)' }}/>
+        <PaintSplash color={C.green} size={250} style={{ top:'20%', right:'5%', transform:'rotate(-45deg)' }}/>
+        <PaintSplash color={C.yellow} size={200} style={{ bottom:'15%', left:'8%', transform:'rotate(60deg)' }}/>
 
-        {/* CSS-animated tribal rings */}
-        <TribalRing size={380} color={C.orange} delay={0}/>
-        <TribalRing size={520} color={C.blue} delay={2}/>
+        {/* Diagonal accent stripe — bold creative energy */}
+        <div className="absolute top-0 right-0 w-[600px] h-[120px] pointer-events-none z-0 -rotate-12 translate-x-20 -translate-y-6"
+          style={{ background:`linear-gradient(90deg, transparent, ${C.purple}08, ${C.blue}06, transparent)` }}/>
+        <div className="absolute bottom-20 left-0 w-[500px] h-[80px] pointer-events-none z-0 rotate-6 -translate-x-20"
+          style={{ background:`linear-gradient(90deg, transparent, ${C.green}06, ${C.yellow}05, transparent)` }}/>
+
+        {/* Floating creative images — small polaroid-style cards hanging in space */}
+        <div className="absolute inset-0 z-[3] pointer-events-none overflow-hidden hidden md:block">
+          {/* Top left — tilted photo card */}
+          <div className="absolute top-[12%] left-[4%] w-[90px] rounded-lg overflow-hidden shadow-xl -rotate-12"
+            style={{ background:'white', padding:'4px 4px 16px 4px', animation:'float 6s ease-in-out infinite' }}>
+            <img src="https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&q=60&w=200" alt="" className="w-full aspect-square object-cover rounded"/>
+            <div className="w-6 h-6 rounded-full absolute -top-2 left-1/2 -translate-x-1/2 flex items-center justify-center" style={{ background:C.yellow }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-white"/>
+            </div>
+          </div>
+
+          {/* Top right — music/audio card */}
+          <div className="absolute top-[8%] right-[6%] w-[80px] rounded-lg overflow-hidden shadow-xl rotate-6"
+            style={{ background:'white', padding:'4px 4px 16px 4px', animation:'float 7s ease-in-out 1s infinite' }}>
+            <img src="https://images.unsplash.com/photo-1634128221889-82ed6efebfc3?auto=format&fit=crop&q=60&w=200" alt="" className="w-full aspect-square object-cover rounded"/>
+            <div className="w-6 h-6 rounded-full absolute -top-2 left-1/2 -translate-x-1/2 flex items-center justify-center" style={{ background:C.green }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-white"/>
+            </div>
+          </div>
+
+          {/* Mid left — design card */}
+          <div className="absolute top-[45%] left-[2%] w-[70px] rounded-lg overflow-hidden shadow-lg rotate-[8deg]"
+            style={{ background:'white', padding:'4px 4px 14px 4px', animation:'float 8s ease-in-out 2s infinite' }}>
+            <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=60&w=200" alt="" className="w-full aspect-square object-cover rounded"/>
+            <div className="w-6 h-6 rounded-full absolute -top-2 left-1/2 -translate-x-1/2 flex items-center justify-center" style={{ background:C.purple }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-white"/>
+            </div>
+          </div>
+
+          {/* Mid right — AI art card */}
+          <div className="absolute top-[55%] right-[3%] w-[85px] rounded-lg overflow-hidden shadow-lg -rotate-[5deg]"
+            style={{ background:'white', padding:'4px 4px 14px 4px', animation:'float 7.5s ease-in-out 0.5s infinite' }}>
+            <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=60&w=200" alt="" className="w-full aspect-square object-cover rounded"/>
+            <div className="w-6 h-6 rounded-full absolute -top-2 left-1/2 -translate-x-1/2 flex items-center justify-center" style={{ background:C.blue }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-white"/>
+            </div>
+          </div>
+
+          {/* Bottom left — video card */}
+          <div className="absolute bottom-[15%] left-[10%] w-[75px] rounded-lg overflow-hidden shadow-lg rotate-[15deg]"
+            style={{ background:'white', padding:'4px 4px 14px 4px', animation:'float 9s ease-in-out 3s infinite' }}>
+            <div className="w-full aspect-square rounded flex items-center justify-center" style={{ background:`linear-gradient(135deg, ${C.navy}, ${C.purple})` }}>
+              <Play size={18} className="text-white" fill="white"/>
+            </div>
+            <div className="w-6 h-6 rounded-full absolute -top-2 left-1/2 -translate-x-1/2 flex items-center justify-center" style={{ background:C.yellow }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-white"/>
+            </div>
+          </div>
+
+          {/* Bottom right — 3D art card */}
+          <div className="absolute bottom-[20%] right-[8%] w-[70px] rounded-lg overflow-hidden shadow-lg -rotate-[10deg]"
+            style={{ background:'white', padding:'4px 4px 14px 4px', animation:'float 6.5s ease-in-out 1.5s infinite' }}>
+            <div className="w-full aspect-square rounded flex items-center justify-center" style={{ background:`linear-gradient(135deg, ${C.blue}, ${C.green})` }}>
+              <Sparkles size={16} className="text-white"/>
+            </div>
+            <div className="w-6 h-6 rounded-full absolute -top-2 left-1/2 -translate-x-1/2 flex items-center justify-center" style={{ background:C.green }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-white"/>
+            </div>
+          </div>
+        </div>
 
         {/* FIX: Hero3D lazy-loaded + only rendered when in viewport */}
         {heroInView && (
@@ -644,19 +706,19 @@ function HomeView({ nav, projects=[] }) {
 
             <motion.div variants={SU} className="inline-flex items-center gap-3 mb-10">
               <div className="flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-[0.3em] shadow-md"
-                style={{ background:'white', color:C.orange, border:`1.5px solid ${C.orange}30` }}>
-                <Sparkles size={13} style={{ color:C.orange }}/> Festival 2026 — Now Open
+                style={{ background:'white', color:C.purple, border:`1.5px solid ${C.purple}30` }}>
+                <Sparkles size={13} style={{ color:C.purple }}/> Festival 2026 — Now Open
               </div>
             </motion.div>
 
             {/* FIX: Removed duplicate ghost AFRICA heading — it was a full extra paint layer */}
             <motion.h1 variants={SU} className="font-black tracking-tighter text-[3.5rem] sm:text-[5.5rem] md:text-[8rem] leading-[0.85] mb-3"
               style={{ color:C.dark }}>
-              AFRICA
+              AFRICA'S
             </motion.h1>
 
             <motion.h2 variants={SU} className="font-black tracking-tighter leading-[0.88] mb-8 text-[2rem] sm:text-[3.2rem] md:text-[4.5rem]"
-              style={{ background:`linear-gradient(135deg,${C.orange} 0%,${C.pink} 45%,${C.blue} 100%)`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
+              style={{ background:`linear-gradient(135deg,${C.purple} 0%,${C.blue} 45%,${C.blue} 100%)`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
               UNTAPPED<br/><span className="italic" style={{ fontWeight:800 }}>TALENT</span>
             </motion.h2>
 
@@ -681,8 +743,8 @@ function HomeView({ nav, projects=[] }) {
         {/* Scroll indicator — CSS animation */}
         <div className="absolute bottom-7 left-1/2 z-20"
           style={{ animation:'scrollBounce 2s ease-in-out infinite' }}>
-          <div className="w-6 h-10 rounded-full flex items-start justify-center p-1.5" style={{ border:`2px solid ${C.orange}60` }}>
-            <div className="w-1.5 h-2.5 rounded-full" style={{ background:C.orange, animation:'scrollDot 2s ease-in-out infinite' }}/>
+          <div className="w-6 h-10 rounded-full flex items-start justify-center p-1.5" style={{ border:`2px solid ${C.purple}60` }}>
+            <div className="w-1.5 h-2.5 rounded-full" style={{ background:C.purple, animation:'scrollDot 2s ease-in-out infinite' }}/>
           </div>
         </div>
       </section>
@@ -690,24 +752,27 @@ function HomeView({ nav, projects=[] }) {
       {/* FRAME 2 — CURATOR'S GALLERY */}
       <section className="relative overflow-hidden" style={{ background:'white' }}>
         <KenteDivider/>
-        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage:`radial-gradient(circle,rgba(255,107,53,0.12) 1px,transparent 1px)`, backgroundSize:'32px 32px' }}/>
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage:`radial-gradient(circle,${C.navy}0D 1px,transparent 1px)`, backgroundSize:'32px 32px' }}/>
+        {/* Creative corner accents */}
+        <div className="absolute top-0 right-0 w-[300px] h-[300px] pointer-events-none" style={{ background:`linear-gradient(225deg, ${C.purple}08 0%, transparent 60%)` }}/>
+        <PaintSplash color={C.blue} size={180} style={{ top:'10%', right:'-3%', transform:'rotate(90deg)' }}/>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-16 md:py-24 relative z-10">
           <RevealSection className="flex flex-col md:flex-row justify-between items-start md:items-end mb-14 gap-6">
             <motion.div variants={SU} className="max-w-xl">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-0.5 rounded-full" style={{ background:`linear-gradient(90deg,${C.orange},transparent)` }}/>
-                <p className="text-xs font-black uppercase tracking-[0.3em]" style={{ color:C.orange }}>Curator's Selection</p>
+                <div className="w-8 h-0.5 rounded-full" style={{ background:`linear-gradient(90deg,${C.purple},transparent)` }}/>
+                <p className="text-xs font-black uppercase tracking-[0.3em]" style={{ color:C.purple }}>Curator's Selection</p>
               </div>
               <h2 className="font-black leading-[0.88] tracking-tighter text-4xl md:text-6xl" style={{ color:C.dark }}>
                 This Week's<br/>
-                <span style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>Gallery</span>
+                <span style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>Gallery</span>
               </h2>
             </motion.div>
             <motion.div variants={SU}>
               <button onClick={() => nav('gallery')} className="group flex items-center gap-2 font-black text-lg pb-1 border-b-2 transition duration-300"
                 style={{ color:C.dark, borderColor:C.dark }}
-                onMouseEnter={e => { e.currentTarget.style.color=C.orange; e.currentTarget.style.borderColor=C.orange; }}
+                onMouseEnter={e => { e.currentTarget.style.color=C.purple; e.currentTarget.style.borderColor=C.purple; }}
                 onMouseLeave={e => { e.currentTarget.style.color=C.dark; e.currentTarget.style.borderColor=C.dark; }}>
                 Full Exhibition <ChevronRight size={20} className="group-hover:translate-x-1.5 transition-transform"/>
               </button>
@@ -719,7 +784,7 @@ function HomeView({ nav, projects=[] }) {
               ? feat.map((p, i) => <FeaturedCard key={p.id} project={p} index={i} onClick={pr => nav('project', pr)}/>)
               : <motion.div variants={SU} className="md:col-span-12 text-center py-24">
                   <p className="text-xl font-light text-gray-400">No featured projects yet.</p>
-                  <button onClick={() => nav('submit')} className="mt-6 px-8 py-4 rounded-full font-black text-white shadow-lg" style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})` }}>Be the first to submit</button>
+                  <button onClick={() => nav('submit')} className="mt-6 px-8 py-4 rounded-full font-black text-white shadow-lg" style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>Be the first to submit</button>
                 </motion.div>
             }
           </RevealSection>
@@ -728,36 +793,40 @@ function HomeView({ nav, projects=[] }) {
       </section>
 
       {/* FRAME 3 — THE VISION */}
-      <section className="relative overflow-hidden py-16 md:py-24" style={{ background:`linear-gradient(160deg,#0D0D1A 0%,#101628 100%)` }}>
-        {/* FIX: Removed the noise texture SVG data-URI — it was a large inline SVG being parsed + rendered as a background */}
-
-        {/* FIX: Vision blobs use CSS animations */}
-        <div className="absolute top-1/2 left-0 -translate-y-1/2 w-[500px] h-[500px] rounded-full pointer-events-none opacity-20"
-          style={{ background:`radial-gradient(circle, ${C.orange} 0%, ${C.orange}30 25%, transparent 65%)` }}/>
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] rounded-full pointer-events-none opacity-15"
-          style={{ background:`radial-gradient(circle, ${C.blue} 0%, ${C.blue}25 25%, transparent 65%)` }}/>
+      <section className="relative overflow-hidden py-16 md:py-24" style={{ background:`linear-gradient(160deg,${C.navy} 0%,#061A5E 100%)` }}>
+        {/* Paint splashes on dark — vibrant pops of colour */}
+        <PaintSplash color={C.purple} size={350} style={{ top:'-5%', left:'-5%', transform:'rotate(30deg)' }} className="opacity-30"/>
+        <PaintSplash color={C.blue} size={300} style={{ bottom:'-8%', right:'-3%', transform:'rotate(180deg)' }} className="opacity-25"/>
+        <PaintSplash color={C.green} size={200} style={{ top:'40%', right:'10%', transform:'rotate(-60deg)' }} className="opacity-20"/>
+        {/* Diagonal creative stripe */}
+        <div className="absolute top-0 left-0 w-full h-[3px] pointer-events-none"
+          style={{ background:`linear-gradient(90deg, ${C.purple}, ${C.blue}, ${C.green}, ${C.yellow})` }}/>
+        {/* Scattered geometric dots */}
+        <div className="absolute top-[15%] left-[8%] w-3 h-3 rounded-full pointer-events-none" style={{ background:C.green, opacity:0.3 }}/>
+        <div className="absolute top-[60%] right-[12%] w-2 h-2 rounded-full pointer-events-none" style={{ background:C.yellow, opacity:0.25 }}/>
+        <div className="absolute bottom-[20%] left-[20%] w-2 h-2 pointer-events-none" style={{ background:C.purple, opacity:0.2, transform:'rotate(45deg)' }}/>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10">
           <RevealSection className="grid lg:grid-cols-2 gap-16 items-center">
             <div className="space-y-8 order-2 lg:order-1">
-              <motion.div variants={SU}><span className="inline-flex items-center gap-2 font-black uppercase tracking-[0.25em] text-xs" style={{ color:C.teal }}><Zap size={14}/>The Vision</span></motion.div>
+              <motion.div variants={SU}><span className="inline-flex items-center gap-2 font-black uppercase tracking-[0.25em] text-xs" style={{ color:C.green }}><Zap size={14}/>The Vision</span></motion.div>
               <motion.h2 variants={SU} className="text-3xl sm:text-4xl md:text-5xl font-black leading-[1.05] tracking-tight text-white">
                 Your Creativity.<br/>Our Platform.<br/>
-                <span style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>Africa's Future.</span>
+                <span style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>Africa's Future.</span>
               </motion.h2>
               <motion.p variants={SU} className="text-lg leading-relaxed font-light max-w-lg" style={{ color:'rgba(255,255,255,0.55)' }}>
                 We believe talent is equally distributed, but opportunity is not. ALX bridges that gap — empowering the next generation of creative leaders with skills, network, and stage.
               </motion.p>
               <motion.button variants={SU} onClick={() => window.open('https://www.alxafrica.com','_blank')}
                 className="inline-flex items-center gap-3 font-black text-lg transition-all pb-1.5 border-b-2 hover:opacity-75"
-                style={{ color:C.orange, borderColor:C.orange }}>
+                style={{ color:C.purple, borderColor:C.purple }}>
                 Join the ALX Community <ExternalLink size={18}/>
               </motion.button>
             </div>
             <motion.div variants={SU} className="relative group order-1 lg:order-2">
               <div className="absolute inset-0 rounded-3xl rotate-3 scale-105 opacity-40 group-hover:rotate-[1.5deg] transition duration-700"
-                style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})`, zIndex:0 }}/>
-              <div className="relative z-10 rounded-3xl overflow-hidden border-4 aspect-video bg-black" style={{ borderColor:'rgba(255,107,53,0.2)' }}>
+                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})`, zIndex:0 }}/>
+              <div className="relative z-10 rounded-3xl overflow-hidden border-4 aspect-video bg-black" style={{ borderColor:'rgba(95,61,196,0.2)' }}>
                 {/* FIX: Added preload="metadata" — don't load entire video until play */}
                 <video src={`${BASE}alx_vid.mp4`} controls preload="metadata" className="w-full h-full object-cover">Your browser does not support video.</video>
               </div>
@@ -769,13 +838,14 @@ function HomeView({ nav, projects=[] }) {
       {/* FRAME 4 — STATS */}
       <section className="relative overflow-hidden py-16" style={{ background:'white' }}>
         <KenteDivider/>
-        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage:`radial-gradient(circle,rgba(0,102,255,0.08) 1px,transparent 1px)`, backgroundSize:'28px 28px' }}/>
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage:`radial-gradient(circle,${C.blue}0D 1px,transparent 1px)`, backgroundSize:'28px 28px' }}/>
+        <PaintSplash color={C.yellow} size={150} style={{ bottom:'5%', left:'2%', transform:'rotate(200deg)' }}/>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-20 relative z-10">
           <RevealSection className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {[
-              { value:'1200', suffix:'+', label:'Creators Showcased', color:C.orange, bg:`linear-gradient(135deg,${C.orange}15,${C.pink}10)`, border:C.orange },
-              { value:'35', suffix:'', label:'Countries Represented', color:C.blue, bg:`linear-gradient(135deg,${C.blue}15,${C.teal}10)`, border:C.blue },
-              { value:'500', suffix:'+', label:'Industry Internships', color:C.green, bg:`linear-gradient(135deg,${C.green}15,${C.teal}10)`, border:C.green },
+              { value:'1200', suffix:'+', label:'Creators Showcased', color:C.purple, bg:`linear-gradient(135deg,${C.purple}15,${C.blue}10)`, border:C.purple },
+              { value:'35', suffix:'', label:'Countries Represented', color:C.blue, bg:`linear-gradient(135deg,${C.blue}15,${C.green}10)`, border:C.blue },
+              { value:'500', suffix:'+', label:'Industry Internships', color:C.green, bg:`linear-gradient(135deg,${C.green}15,${C.green}10)`, border:C.green },
             ].map(({ value, suffix, label, color, bg, border }, i) => (
               <motion.div key={i} variants={SU} className="relative overflow-hidden rounded-3xl p-10 text-center group cursor-default"
                 style={{ background:bg, border:`1px solid ${border}20` }}>
@@ -814,8 +884,8 @@ function GalleryView({ nav, projects=[] }) {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-14 gap-8">
           <div>
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-0.5 rounded-full" style={{ background:`linear-gradient(90deg,${C.orange},transparent)` }}/>
-              <p className="text-xs font-black uppercase tracking-[0.3em]" style={{ color:C.orange }}>The Showcase</p>
+              <div className="w-8 h-0.5 rounded-full" style={{ background:`linear-gradient(90deg,${C.purple},transparent)` }}/>
+              <p className="text-xs font-black uppercase tracking-[0.3em]" style={{ color:C.purple }}>The Showcase</p>
             </div>
             <h1 className="font-black leading-tight tracking-tighter text-4xl md:text-6xl" style={{ color:C.dark }}>Gallery</h1>
             <p className="text-lg font-light mt-2" style={{ color:`${C.dark}60` }}>Groundbreaking work from across the continent.</p>
@@ -825,7 +895,7 @@ function GalleryView({ nav, projects=[] }) {
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search creators or titles…"
               className="w-full pl-11 pr-4 py-3.5 rounded-2xl text-sm font-medium focus:outline-none transition shadow-sm"
               style={{ background:'white', border:'1px solid rgba(0,0,0,0.1)', color:C.dark }}
-              onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+              onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
           </div>
         </div>
 
@@ -837,7 +907,7 @@ function GalleryView({ nav, projects=[] }) {
               <button key={f} onClick={() => setFilter(f)}
                 className="px-5 py-2.5 rounded-full text-sm font-black transition-all duration-300 flex items-center gap-2.5"
                 style={active
-                  ? { background:`linear-gradient(135deg,${C.orange},${C.pink})`, color:'white', boxShadow:`0 8px 24px ${C.orange}30`, transform:'scale(1.05)' }
+                  ? { background:`linear-gradient(135deg,${C.purple},${C.blue})`, color:'white', boxShadow:`0 8px 24px ${C.purple}30`, transform:'scale(1.05)' }
                   : { background:'white', color:C.dark, border:'1px solid rgba(0,0,0,0.1)' }
                 }>
                 {f} <span className="text-xs px-2 py-0.5 rounded-full" style={active ? { background:'rgba(255,255,255,0.25)', color:'white' } : { background:'rgba(0,0,0,0.06)', color:`${C.dark}70` }}>{cnt}</span>
@@ -871,7 +941,7 @@ function GalleryView({ nav, projects=[] }) {
                   <span className="text-[10px] font-black uppercase tracking-widest border px-3 py-1.5 rounded-lg"
                     style={{ color:C.blue, borderColor:`${C.blue}25`, background:`${C.blue}08` }}>{project.program}</span>
                   <div className="flex items-center gap-1.5 text-sm font-bold" style={{ color:`${C.dark}50` }}>
-                    <Heart size={14} fill="currentColor" style={{ color:C.pink }}/>{project.likes}
+                    <Heart size={14} fill="currentColor" style={{ color:C.blue }}/>{project.likes}
                   </div>
                 </div>
                 <h3 className="font-black text-2xl mb-1.5 leading-tight transition group-hover:opacity-75" style={{ color:C.dark }}>{project.title}</h3>
@@ -894,7 +964,7 @@ function GalleryView({ nav, projects=[] }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function SubmitView({ nav, onSubmit }) {
   const [step, setStep] = useState(1);
-  const [fd, setFd] = useState({ title:'', creator:'', email:'', program:'Content Creation', city:'', category:'Visual', description:'', link:'', linkedin:'', alxStatus:'Current Learner' });
+  const [fd, setFd] = useState({ title:'', creator:'', email:'', program:'Content Creation', city:'', category:'Visual', description:'', link:'', linkedin:'', tiktok:'', instagram:'', alxStatus:'Current Learner' });
   const handleSubmit = (e) => {
     e.preventDefault();
     let linkedinUrl = fd.linkedin.trim();
@@ -905,7 +975,7 @@ function SubmitView({ nav, onSubmit }) {
     if (postLink && !postLink.startsWith('http') && !postLink.startsWith('blob:')) {
       postLink = 'https://' + postLink;
     }
-    onSubmit({...fd, link:postLink, image:postLink||FALLBACK_IMG, linkedin:linkedinUrl, id:Date.now(), likes:0, tags:[]});
+    onSubmit({...fd, link:postLink, image:postLink||FALLBACK_IMG, linkedin:linkedinUrl, tiktok:fd.tiktok.trim(), instagram:fd.instagram.trim(), id:Date.now(), likes:0, tags:[], comments:[]});
   };
   const inp = "w-full bg-white border rounded-2xl px-5 py-4 focus:outline-none text-base font-medium shadow-sm transition";
   const inpStyle = { borderColor:'rgba(0,0,0,0.1)', color:C.dark };
@@ -922,11 +992,11 @@ function SubmitView({ nav, onSubmit }) {
 
         <div className="rounded-3xl shadow-xl overflow-hidden" style={{ background:'white', border:'1px solid rgba(0,0,0,0.06)' }}>
           <div className="h-1.5">
-            <motion.div className="h-full" animate={{ width:step === 1 ? '50%' : '100%' }} transition={{ duration:0.4 }} style={{ background:`linear-gradient(90deg,${C.orange},${C.pink})` }}/>
+            <motion.div className="h-full" animate={{ width:step === 1 ? '50%' : '100%' }} transition={{ duration:0.4 }} style={{ background:`linear-gradient(90deg,${C.purple},${C.blue})` }}/>
           </div>
           <div className="relative">
             <div className="p-10 sm:p-12 relative z-10">
-              <p className="text-xs font-black uppercase tracking-[0.3em] mb-2" style={{ color:C.orange }}>Step {step} of 2</p>
+              <p className="text-xs font-black uppercase tracking-[0.3em] mb-2" style={{ color:C.purple }}>Step {step} of 2</p>
               <h1 className="text-4xl font-black mb-2 tracking-tight" style={{ color:C.dark }}>Submit Your Work</h1>
               <p className="mb-10 text-lg font-light" style={{ color:`${C.dark}55` }}>Share your creativity with the ALX community.</p>
 
@@ -936,35 +1006,42 @@ function SubmitView({ nav, onSubmit }) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Full Name</label>
-                        <input required className={inp} style={inpStyle} placeholder="e.g. Jane Doe" value={fd.creator} onChange={e => setFd({...fd, creator:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                        <input required className={inp} style={inpStyle} placeholder="e.g. Jane Doe" value={fd.creator} onChange={e => setFd({...fd, creator:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                       </div>
                       <div>
                         <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Email</label>
-                        <input required type="email" className={inp} style={inpStyle} placeholder="jane@example.com" value={fd.email} onChange={e => setFd({...fd, email:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                        <input required type="email" className={inp} style={inpStyle} placeholder="jane@example.com" value={fd.email} onChange={e => setFd({...fd, email:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Program</label>
-                        <select className={inp} style={inpStyle} value={fd.program} onChange={e => setFd({...fd, program:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
-                          {['Content Creation','AI For Creators','Graphic Design','Music and Audio Production','Data Science','Cloud Computing'].map(p => <option key={p}>{p}</option>)}
+                        <select className={inp} style={inpStyle} value={fd.program} onChange={e => setFd({...fd, program:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
+                          {[
+                            'Front End','Back End','Front-End ProDev','Back-End ProDev',
+                            'Data Analytics','Data Science','Data Engineering',
+                            'AWS Cloud Practitioner','AWS Solutions Architect',
+                            'SalesForce Associate','SalesForce Administrator',
+                            'Cybersecurity',
+                            'AI for Creatives','Graphic Design','Content Creation','Audio Production',
+                          ].map(p => <option key={p}>{p}</option>)}
                         </select>
                       </div>
                       <div>
                         <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>ALX Status</label>
-                        <select className={inp} style={inpStyle} value={fd.alxStatus} onChange={e => setFd({...fd, alxStatus:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
+                        <select className={inp} style={inpStyle} value={fd.alxStatus} onChange={e => setFd({...fd, alxStatus:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
                           {['Current Learner','Alumni','Applicant'].map(s => <option key={s}>{s}</option>)}
                         </select>
                       </div>
                     </div>
                     <div>
                       <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>City & Country</label>
-                      <input required className={inp} style={inpStyle} placeholder="e.g. Nairobi, Kenya" value={fd.city} onChange={e => setFd({...fd, city:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                      <input required className={inp} style={inpStyle} placeholder="e.g. Nairobi, Kenya" value={fd.city} onChange={e => setFd({...fd, city:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                     </div>
                     <motion.button whileTap={{ scale:0.97 }}
                       type="button" onClick={() => { if (fd.creator && fd.city && fd.email) setStep(2); }}
                       className="w-full py-4 rounded-2xl font-black text-white text-lg flex items-center justify-center gap-2 shadow-lg"
-                      style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})` }}>
+                      style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
                       Next Step <ChevronRight size={20}/>
                     </motion.button>
                   </motion.div>
@@ -972,7 +1049,7 @@ function SubmitView({ nav, onSubmit }) {
                   <motion.div initial={{ opacity:0, x:20 }} animate={{ opacity:1, x:0 }} transition={{ duration:0.3 }} className="space-y-7">
                     <div>
                       <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Project Title</label>
-                      <input required className={inp} style={inpStyle} placeholder="Give your work a catchy title" value={fd.title} onChange={e => setFd({...fd, title:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                      <input required className={inp} style={inpStyle} placeholder="Give your work a catchy title" value={fd.title} onChange={e => setFd({...fd, title:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                     </div>
                     <div>
                       <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Category</label>
@@ -980,7 +1057,7 @@ function SubmitView({ nav, onSubmit }) {
                         {['Visual','Video','Audio','Writing'].map(type => (
                           <button key={type} type="button" onClick={() => setFd({...fd, category:type})}
                             className="px-6 py-3 rounded-full text-sm font-black transition-all"
-                            style={fd.category === type ? { background:`linear-gradient(135deg,${C.orange},${C.pink})`, color:'white', boxShadow:`0 8px 24px ${C.orange}30` } : { background:'white', color:C.dark, border:'1.5px solid rgba(0,0,0,0.12)' }}>
+                            style={fd.category === type ? { background:`linear-gradient(135deg,${C.purple},${C.blue})`, color:'white', boxShadow:`0 8px 24px ${C.purple}30` } : { background:'white', color:C.dark, border:'1.5px solid rgba(0,0,0,0.12)' }}>
                             {type}
                           </button>
                         ))}
@@ -988,16 +1065,16 @@ function SubmitView({ nav, onSubmit }) {
                     </div>
                     <div>
                       <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Media Link / Upload</label>
-                      <div className="border-2 border-dashed rounded-2xl p-10 text-center transition group" style={{ borderColor:'rgba(0,0,0,0.12)', background:'rgba(255,107,53,0.02)' }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = C.orange} onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'}>
+                      <div className="border-2 border-dashed rounded-2xl p-10 text-center transition group" style={{ borderColor:'rgba(0,0,0,0.12)', background:'rgba(95,61,196,0.02)' }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = C.purple} onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'}>
                         <input type="file" id="fu" className="hidden" accept="image/*,video/*" onChange={e => { const f = e.target.files[0]; if (f) setFd({...fd, link:URL.createObjectURL(f)}); }}/>
                         <label htmlFor="fu" className="cursor-pointer block">
-                          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition" style={{ background:`${C.orange}12` }}>
-                            <Upload size={28} style={{ color:C.orange }}/>
+                          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition" style={{ background:`${C.purple}12` }}>
+                            <Upload size={28} style={{ color:C.purple }}/>
                           </div>
                           <p className="text-base font-bold" style={{ color:C.dark }}>
                             {fd.link?.startsWith('blob:')
-                              ? <span className="flex items-center justify-center gap-2" style={{ color:C.teal }}><CheckCircle size={17}/>File Selected</span>
+                              ? <span className="flex items-center justify-center gap-2" style={{ color:C.green }}><CheckCircle size={17}/>File Selected</span>
                               : 'Click to browse files'}
                           </p>
                           <p className="text-xs mt-1" style={{ color:`${C.dark}40` }}>Supports JPG, PNG, MP4</p>
@@ -1007,11 +1084,11 @@ function SubmitView({ nav, onSubmit }) {
                           className="w-full border rounded-xl p-3.5 text-sm focus:outline-none bg-white shadow-sm"
                           style={{ borderColor:'rgba(0,0,0,0.1)', color:C.dark }}
                           value={!fd.link?.startsWith('blob:') ? fd.link : ''} onChange={e => setFd({...fd, link:e.target.value})}
-                          onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                          onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                         {detectedPlatform && (
-                          <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl" style={{ background:`${C.teal}10`, border:`1px solid ${C.teal}25` }}>
-                            <CheckCircle size={14} style={{ color:C.teal }}/>
-                            <span className="text-xs font-bold" style={{ color:C.teal }}>Detected: {detectedPlatform}</span>
+                          <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl" style={{ background:`${C.green}10`, border:`1px solid ${C.green}25` }}>
+                            <CheckCircle size={14} style={{ color:C.green }}/>
+                            <span className="text-xs font-bold" style={{ color:C.green }}>Detected: {detectedPlatform}</span>
                             <span className="text-xs" style={{ color:`${C.dark}40` }}>— will display as embedded content or link card</span>
                           </div>
                         )}
@@ -1019,15 +1096,25 @@ function SubmitView({ nav, onSubmit }) {
                     </div>
                     <div>
                       <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Description</label>
-                      <textarea className={`${inp} h-36 resize-none`} style={inpStyle} placeholder="Tell us the inspiration behind this project…" value={fd.description} onChange={e => setFd({...fd, description:e.target.value})} onFocus={e => e.target.style.borderColor = C.orange} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                      <textarea className={`${inp} h-36 resize-none`} style={inpStyle} placeholder="Tell us the inspiration behind this project…" value={fd.description} onChange={e => setFd({...fd, description:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>LinkedIn Profile</label>
-                      <div className="relative">
-                        <Linkedin size={17} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:`${C.blue}70` }}/>
-                        <input className={`${inp} pl-11`} style={inpStyle} placeholder="https://www.linkedin.com/in/your-name" value={fd.linkedin} onChange={e => setFd({...fd, linkedin:e.target.value})} onFocus={e => e.target.style.borderColor = C.blue} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                      <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Social Profiles <span className="font-medium normal-case tracking-normal" style={{ color:`${C.dark}40` }}>(optional)</span></label>
+                      <div className="space-y-3">
+                        <div className="relative">
+                          <Linkedin size={17} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:`${C.blue}70` }}/>
+                          <input className={`${inp} pl-11`} style={inpStyle} placeholder="linkedin.com/in/your-name" value={fd.linkedin} onChange={e => setFd({...fd, linkedin:e.target.value})} onFocus={e => e.target.style.borderColor = C.blue} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                        </div>
+                        <div className="relative">
+                          <Instagram size={17} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:`${C.purple}70` }}/>
+                          <input className={`${inp} pl-11`} style={inpStyle} placeholder="instagram.com/your-handle" value={fd.instagram} onChange={e => setFd({...fd, instagram:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                        </div>
+                        <div className="relative">
+                          <Play size={17} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:`${C.dark}50` }}/>
+                          <input className={`${inp} pl-11`} style={inpStyle} placeholder="tiktok.com/@your-handle" value={fd.tiktok} onChange={e => setFd({...fd, tiktok:e.target.value})} onFocus={e => e.target.style.borderColor = C.dark} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                        </div>
                       </div>
-                      <p className="text-xs mt-1.5 font-medium" style={{ color:`${C.dark}35` }}>So recruiters and collaborators can find you</p>
+                      <p className="text-xs mt-1.5 font-medium" style={{ color:`${C.dark}35` }}>Help recruiters and collaborators find you</p>
                     </div>
                     <div className="flex gap-4 pt-2">
                       <motion.button whileTap={{ scale:0.97 }} type="button" onClick={() => setStep(1)}
@@ -1035,7 +1122,7 @@ function SubmitView({ nav, onSubmit }) {
                         style={{ background:'white', color:C.dark, border:'1.5px solid rgba(0,0,0,0.1)' }}>Back</motion.button>
                       <motion.button whileTap={{ scale:0.97 }} type="submit"
                         className="flex-[2] py-4 rounded-2xl font-black text-white text-base shadow-xl"
-                        style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})` }}>Submit Project ✦</motion.button>
+                        style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>Submit Project ✦</motion.button>
                     </div>
                   </motion.div>
                 )}
@@ -1054,8 +1141,16 @@ function SubmitView({ nav, onSubmit }) {
 function ProjectView({ nav, project }) {
   const [liked, setLiked] = useState(false);
   const [likes, setLikes] = useState(project?.likes || 0);
+  const [comments, setComments] = useState(project?.comments || []);
+  const [commentText, setCommentText] = useState('');
+  const [commentName, setCommentName] = useState('');
   if (!project) return null;
   const isExt = url => url && (url.includes('http') || url.includes('www'));
+  const addComment = () => {
+    if (!commentText.trim() || !commentName.trim()) return;
+    setComments(prev => [...prev, { name:commentName.trim(), text:commentText.trim(), date:new Date().toLocaleDateString() }]);
+    setCommentText('');
+  };
 
   return (
     <div className="min-h-screen" style={{ background:C.offwhite }}>
@@ -1089,7 +1184,7 @@ function ProjectView({ nav, project }) {
                   return (
                     <>
                       <SafeImage src={project.image} alt={project.title} className="w-full h-full object-contain"/>
-                      {project.category === 'Audio' && <div className="absolute inset-0 flex items-center justify-center bg-black/50"><div className="w-24 h-24 border rounded-full flex items-center justify-center animate-pulse" style={{ background:`${C.orange}15`, borderColor:`${C.orange}30` }}><Music size={38} style={{ color:C.orange }}/></div></div>}
+                      {project.category === 'Audio' && <div className="absolute inset-0 flex items-center justify-center bg-black/50"><div className="w-24 h-24 border rounded-full flex items-center justify-center animate-pulse" style={{ background:`${C.purple}15`, borderColor:`${C.purple}30` }}><Music size={38} style={{ color:C.purple }}/></div></div>}
                     </>
                   );
                 })()}
@@ -1115,11 +1210,11 @@ function ProjectView({ nav, project }) {
               <div className="flex items-center gap-5 mb-8">
                 {project.profileImage
                   ? <SafeImage src={project.profileImage} alt={project.creator} className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg"/>
-                  : <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-white shadow-lg" style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})` }}>{project.creator?.charAt(0)}</div>
+                  : <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black text-white border-4 border-white shadow-lg" style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>{project.creator?.charAt(0)}</div>
                 }
                 <div>
                   <div className="font-black text-2xl mb-0.5" style={{ color:C.dark }}>{project.creator}</div>
-                  <div className="font-black text-sm mb-1" style={{ color:C.orange }}>{project.program}</div>
+                  <div className="font-black text-sm mb-1" style={{ color:C.purple }}>{project.program}</div>
                   <div className="text-sm flex items-center gap-1.5 font-medium" style={{ color:`${C.dark}50` }}><MapPin size={13}/>{project.city}</div>
                 </div>
               </div>
@@ -1130,26 +1225,90 @@ function ProjectView({ nav, project }) {
                   return 'https://' + url;
                 })()} target="_blank" rel="noopener noreferrer"
                 className="block w-full text-center font-black py-3.5 rounded-2xl text-white shadow-lg transition hover:opacity-90"
-                style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})` }}>View Profile</a>
+                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>View Profile</a>
             </div>
             <div className="rounded-3xl p-8 shadow-lg" style={{ background:'white', border:'1px solid rgba(0,0,0,0.06)' }}>
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em]" style={{ color:`${C.dark}40` }}>Engagement</h3>
-                <span className="text-xs font-black px-3 py-1.5 rounded-lg" style={{ background:`${C.pink}12`, color:C.pink }}>HOT</span>
+                <span className="text-xs font-black px-3 py-1.5 rounded-lg" style={{ background:`${C.blue}12`, color:C.blue }}>HOT</span>
               </div>
               <button onClick={() => { setLiked(!liked); setLikes(c => liked ? c-1 : c+1); }}
                 className={`w-full py-4 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all border ${liked ? '' : 'hover:opacity-80'}`}
-                style={liked ? { background:`${C.pink}10`, borderColor:`${C.pink}30`, color:C.pink } : { background:'white', borderColor:`${C.pink}20`, color:C.pink }}>
+                style={liked ? { background:`${C.blue}10`, borderColor:`${C.blue}30`, color:C.blue } : { background:'white', borderColor:`${C.blue}20`, color:C.blue }}>
                 <Heart fill={liked ? 'currentColor' : 'none'} size={22} style={{ transform:liked ? 'scale(1.2)' : 'scale(1)', transition:'transform 0.2s' }}/>{likes}
               </button>
             </div>
+
+            {/* Social Profiles */}
+            {(project.instagram || project.tiktok) && (
+              <div className="rounded-3xl p-8 shadow-lg" style={{ background:'white', border:'1px solid rgba(0,0,0,0.06)' }}>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] mb-5" style={{ color:`${C.dark}40` }}>Also Find Them On</h3>
+                <div className="space-y-3">
+                  {project.instagram && (
+                    <a href={project.instagram.startsWith('http') ? project.instagram : `https://${project.instagram}`} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 rounded-xl transition hover:scale-[1.02]" style={{ background:`${C.purple}08`, border:`1px solid ${C.purple}15` }}>
+                      <Instagram size={18} style={{ color:C.purple }}/> <span className="text-sm font-bold" style={{ color:C.dark }}>Instagram</span>
+                      <ExternalLink size={13} className="ml-auto" style={{ color:`${C.dark}30` }}/>
+                    </a>
+                  )}
+                  {project.tiktok && (
+                    <a href={project.tiktok.startsWith('http') ? project.tiktok : `https://${project.tiktok}`} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 rounded-xl transition hover:scale-[1.02]" style={{ background:`${C.dark}06`, border:`1px solid ${C.dark}10` }}>
+                      <Play size={18} style={{ color:C.dark }}/> <span className="text-sm font-bold" style={{ color:C.dark }}>TikTok</span>
+                      <ExternalLink size={13} className="ml-auto" style={{ color:`${C.dark}30` }}/>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Feedback / Comments */}
+            <div className="rounded-3xl p-8 shadow-lg" style={{ background:'white', border:'1px solid rgba(0,0,0,0.06)' }}>
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] mb-5" style={{ color:`${C.dark}40` }}>Give Feedback</h3>
+              <div className="space-y-3 mb-5">
+                <input value={commentName} onChange={e => setCommentName(e.target.value)} placeholder="Your name"
+                  className="w-full border rounded-xl px-4 py-3 text-sm font-medium focus:outline-none transition"
+                  style={{ borderColor:'rgba(0,0,0,0.1)', color:C.dark }}
+                  onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                <textarea value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="Share your thoughts on this work…"
+                  className="w-full border rounded-xl px-4 py-3 text-sm font-medium focus:outline-none transition resize-none h-24"
+                  style={{ borderColor:'rgba(0,0,0,0.1)', color:C.dark }}
+                  onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                <button onClick={addComment}
+                  className="w-full py-3 rounded-xl font-bold text-sm text-white transition hover:opacity-90"
+                  style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
+                  Post Feedback
+                </button>
+              </div>
+              {comments.length > 0 && (
+                <div className="space-y-4 pt-4" style={{ borderTop:'1px solid rgba(0,0,0,0.06)' }}>
+                  {comments.map((c, i) => (
+                    <div key={i} className="flex gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                        style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
+                        {c.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-bold" style={{ color:C.dark }}>{c.name}</span>
+                          <span className="text-xs" style={{ color:`${C.dark}40` }}>{c.date}</span>
+                        </div>
+                        <p className="text-sm leading-relaxed" style={{ color:`${C.dark}70` }}>{c.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="rounded-3xl p-8 shadow-2xl relative overflow-hidden text-white"
-              style={{ background:`linear-gradient(135deg,${C.dark} 0%,#1a1040 100%)` }}>
+              style={{ background:`linear-gradient(135deg,${C.navy} 0%,#061A5E 100%)` }}>
+              <PaintSplash color={C.purple} size={120} style={{ top:'-15%', right:'-10%', transform:'rotate(60deg)' }} className="opacity-30"/>
+              <PaintSplash color={C.blue} size={100} style={{ bottom:'-10%', left:'-8%', transform:'rotate(-30deg)' }} className="opacity-20"/>
               <h3 className="font-black text-2xl mb-2 relative z-10">Hire this Talent</h3>
               <p className="text-sm mb-7 relative z-10 leading-relaxed font-light" style={{ color:'rgba(255,255,255,0.55)' }}>Interested in collaborating with {project.creator}?</p>
               <motion.button whileTap={{ scale:0.97 }}
                 className="w-full font-black py-3.5 rounded-2xl text-white shadow-xl relative z-10 transition"
-                style={{ background:`linear-gradient(135deg,${C.orange},${C.pink})` }}>
+                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
                 Send Message
               </motion.button>
             </div>
