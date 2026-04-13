@@ -1,3 +1,5 @@
+/* eslint-disable */
+// Hero3D is no longer imported — kept for reference only.
 import React, { useRef, useMemo, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';

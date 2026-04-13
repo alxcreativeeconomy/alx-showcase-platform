@@ -1,14 +1,18 @@
-import React, { useRef, useEffect, useState, useMemo, useCallback, lazy, Suspense } from 'react';
-import { motion, useScroll, useTransform, useInView, useMotionValue, useSpring } from 'framer-motion';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { motion, useInView, useMotionValue, useSpring } from 'framer-motion';
 import {
   Upload, Heart, Share2, MapPin, Search, Menu, X, ChevronRight,
   Play, FileText, Image as ImageIcon, Music, ArrowLeft, CheckCircle,
-  ExternalLink, Linkedin, Instagram, Globe, Sparkles, Zap, Loader
+  ExternalLink, Linkedin, Instagram, Globe, Sparkles, Zap, Loader,
+  Download, ChevronUp, ChevronDown, Shield,
 } from 'lucide-react';
 
 
-// ─── Lazy-load Hero3D (heaviest component) ────────────────────────────────────
-const Hero3D = lazy(() => import('./Hero3D'));
+// ─── Firebase ────────────────────────────────────────────────────────────────
+import { db, auth, storage } from './firebase';
+import { collection, addDoc, getDocs, query, orderBy, limit, doc, setDoc, updateDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
+import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 
 
@@ -29,6 +33,13 @@ const C = {
   dark:    '#1C1F2A',
   offwhite:'#F8F8F8',
 };
+
+// ─── Admin email whitelist — add your email(s) here ──────────────────────────
+// Only these addresses will see the Admin link and be able to access /admin.
+// Everyone else sees the normal site — the route simply doesn't exist for them.
+const ADMIN_EMAILS = [
+  'admin@alxafrica.com',   // ← replace with your real admin email(s)
+];
 
 // ─── Base URL for assets (works with Vite's base path on GitHub Pages) ────────
 const BASE = import.meta.env.BASE_URL;
@@ -247,6 +258,18 @@ async function fetchSubmissionsFromSheet() {
   }
 }
 
+// ─── Fetch saved submissions from Firestore ───────────────────────────────────
+async function fetchProjectsFromFirestore() {
+  try {
+    const q = query(collection(db, 'projects'), orderBy('createdAt', 'desc'), limit(200));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ docId: d.id, id: d.id, ...d.data(), likedBy: d.data().likedBy || [] }));
+  } catch (e) {
+    console.warn('Firestore fetch failed:', e.message);
+    return [];
+  }
+}
+
 // ─── Mock data — use hosted URLs as fallbacks for local images ────────────────
 const INITIAL_PROJECTS = [
   { id:1, title:"Urban Rhythms: Ghana", creator:"Diana Aidoo.", program:"Content Creation", city:"Accra, Ghana", category:"Video", image:`${BASE}dina.png`, videoUrl:`${BASE}diana.mp4`, linkedin:"https://www.linkedin.com/in/diana-aidoo/", profileImage:`${BASE}dina.png`, description:"Urban Rhythms Ghana is a vibrant visual journey through the streets of Accra, where movement, culture, and sound collide. Captured through the lens of creator Diana Aidoo, the video celebrates Ghana's street dance scene as a powerful form of self-expression, storytelling, and identity.", likes:124, tags:["AfricanDance","Ghana","Culture"], featured:true },
@@ -322,8 +345,6 @@ const GeoShapes = React.memo(({ className='' }) => (
 
 // ─── Grain Texture Overlay — adds creative depth ─────────────────────────────
 const grainCSS = `
-@keyframes scrollBounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(10px); } }
-@keyframes scrollDot { 0%, 100% { transform: translateY(0); opacity: 1; } 50% { transform: translateY(12px); opacity: 0; } }
 @keyframes float { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
 `;
 
@@ -406,13 +427,29 @@ function RevealSection({ children, className='' }) {
 }
 
 // ─── Featured card — lazy images ──────────────────────────────────────────────
-function FeaturedCard({ project, index, onClick }) {
+function FeaturedCard({ project, index, onClick, authUser, onSignInRequest }) {
   const isHero = index === 0;
+  const [liked, setLiked] = useState(() => authUser && project?.likedBy?.includes(authUser.uid));
+  const [likes, setLikes] = useState(project?.likes || 0);
+
+  const handleLike = async (e) => {
+    e.stopPropagation();
+    if (!authUser) { onSignInRequest('signin'); return; }
+    if (!project.docId) return;
+    const ref = doc(db, 'projects', project.docId);
+    if (liked) {
+      setLiked(false); setLikes(c => Math.max(0, c - 1));
+      await updateDoc(ref, { likes: increment(-1), likedBy: arrayRemove(authUser.uid) }).catch(() => {});
+    } else {
+      setLiked(true); setLikes(c => c + 1);
+      await updateDoc(ref, { likes: increment(1), likedBy: arrayUnion(authUser.uid) }).catch(() => {});
+    }
+  };
+
   return (
     <motion.div variants={SU} onClick={() => onClick(project)}
       className={`group relative cursor-pointer rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-shadow duration-500 ${isHero?'md:col-span-7':'md:col-span-5'}`}
       style={{ minHeight: isHero?420:280, background:C.dark, contain:'layout style paint' }}>
-      {/* FIX: Use CSS transform for hover zoom instead of Framer Motion whileHover on img */}
       <SafeImage src={project.image} alt={project.title}
         className="absolute inset-0 w-full h-full object-cover opacity-90 transition-transform duration-700 ease-out group-hover:scale-[1.06]"/>
       <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.2) 55%, transparent 100%)' }}/>
@@ -423,12 +460,12 @@ function FeaturedCard({ project, index, onClick }) {
           {project.category==='Video'&&<Play size={9} fill="currentColor"/>}{project.category}
         </span>
       </div>
-      {/* Likes */}
-      <div className="absolute top-5 right-5 flex items-center gap-1.5 text-white text-sm font-bold px-3 py-2 rounded-full"
-        style={{ background:'rgba(0,0,0,0.4)' }}>
-        {/* FIX: Removed backdrop-blur from small elements — expensive for tiny visual gain */}
-        <Heart size={13} fill="currentColor" className="text-blue-400"/>{project.likes}
-      </div>
+      {/* Like button */}
+      <button onClick={handleLike}
+        className="absolute top-5 right-5 flex items-center gap-1.5 text-white text-sm font-bold px-3 py-2 rounded-full transition hover:scale-110 active:scale-95"
+        style={{ background: liked ? 'rgba(59,130,246,0.7)' : 'rgba(0,0,0,0.4)' }}>
+        <Heart size={13} fill={liked ? 'currentColor' : 'none'} className="text-blue-300"/>{likes}
+      </button>
       {/* Bottom info */}
       <div className="absolute bottom-0 left-0 right-0 p-7">
         <p className="text-xs font-black uppercase tracking-[0.2em] mb-2" style={{ color:C.green }}>{project.program}</p>
@@ -476,32 +513,64 @@ export default function App() {
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [selected, setSelected] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [authUser, setAuthUser] = useState(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState('signin');
+  const isAdmin = ADMIN_EMAILS.includes(authUser?.email);
 
-  // Fetch saved submissions from Google Sheets on page load
+  // Firebase auth listener
   useEffect(() => {
-    fetchSubmissionsFromSheet().then(sheetProjects => {
-      if (sheetProjects.length > 0) {
-        // Always build the full list from scratch: sheet submissions + hardcoded projects
-        // This prevents duplicates from stale React state
-        const initialTitles = new Set(INITIAL_PROJECTS.map(p => p.title.toLowerCase()));
-        const newFromSheet = sheetProjects.filter(sp => !initialTitles.has(sp.title.toLowerCase()));
-        setProjects([...newFromSheet.reverse(), ...INITIAL_PROJECTS]);
-      }
+    const unsub = onAuthStateChanged(auth, setAuthUser);
+    return unsub;
+  }, []);
+
+  // Fetch submissions from Firestore + Google Sheets on page load
+  useEffect(() => {
+    Promise.all([fetchProjectsFromFirestore(), fetchSubmissionsFromSheet()]).then(([firestoreProjects, sheetProjects]) => {
+      const allRemote = [...firestoreProjects, ...sheetProjects];
+      if (allRemote.length === 0) return;
+      const initialTitles = new Set(INITIAL_PROJECTS.map(p => p.title.toLowerCase()));
+      // Deduplicate by title (Firestore takes priority since it comes first)
+      const seen = new Set(initialTitles);
+      const newFromRemote = allRemote.filter(p => {
+        const key = (p.title || '').toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setProjects([...newFromRemote.reverse(), ...INITIAL_PROJECTS]);
     });
   }, []);
 
   const nav = useCallback((v, p=null) => {
     window.scrollTo({ top: 0, behavior: 'instant' });
     setView(v);
-    if (p) setSelected(p);
+    if (p !== null) setSelected(p);
     setMenuOpen(false);
   }, []);
 
-  const handleSubmit = useCallback((np) => {
-    setProjects(p => [{ ...np, createdAt: Date.now(), likes: 0, featured: false }, ...p]);
-    // Clear cache so next refresh fetches fresh data including this submission
-    try { sessionStorage.removeItem(CACHE_KEY); } catch {}
-    // Log to Google Sheets in background (non-blocking)
+  const openSignIn = useCallback((mode = 'signin') => {
+    setAuthModalMode(mode);
+    setShowAuthModal(true);
+  }, []);
+
+  const handleSubmit = useCallback(async (np) => {
+    let projectId = String(Date.now());
+    // Save to Firestore (primary store for new submissions)
+    try {
+      const docRef = await addDoc(collection(db, 'projects'), {
+        ...np,
+        userId: authUser?.uid || null,
+        createdAt: Date.now(),
+        likes: 0,
+      });
+      projectId = docRef.id;
+    } catch (e) {
+      console.warn('Firestore save failed, falling back to local only:', e.message);
+    }
+    setProjects(p => [{ ...np, id: projectId, createdAt: Date.now(), likes: 0, featured: false }, ...p]);
+    try { sessionStorage.removeItem(CACHE_KEY); } catch { /* sessionStorage unavailable */ }
+    // Also log to Google Sheets as a backup record
     const nameParts = (np.creator || '').trim().split(/\s+/);
     logToGoogleSheets({
       firstName: nameParts[0] || '',
@@ -519,14 +588,17 @@ export default function App() {
       title: np.title || '',
       platform: detectPlatform(np.link) || 'Direct Upload',
     });
-    nav('gallery');
-  }, [nav]);
+    nav('profile', { name: np.creator, email: np.email, userId: authUser?.uid || null, program: np.program, city: np.city, alxStatus: np.alxStatus, linkedin: np.linkedin, instagram: np.instagram, tiktok: np.tiktok });
+  }, [nav, authUser]);
 
   return (
     <div className="min-h-screen overflow-x-hidden" style={{ fontFamily:"'Poppins',system-ui,sans-serif", background:C.offwhite, color:C.dark }}>
 
+      {showAuthModal && (
+        <AuthModal mode={authModalMode} onClose={() => setShowAuthModal(false)} onSuccess={() => setShowAuthModal(false)}/>
+      )}
+
       {/* ── NAV ─────────────────────────────────────────────────────── */}
-      {/* FIX: Removed backdrop-blur from nav on mobile — huge perf win on low-end devices */}
       <motion.nav initial={{ y:-100 }} animate={{ y:0 }} transition={{ duration:0.5, ease:'easeOut' }}
         className="fixed top-0 w-full z-50 shadow-sm"
         style={{ background:'rgba(250,250,248,0.96)', borderBottom:'1px solid rgba(0,0,0,0.07)' }}>
@@ -536,8 +608,31 @@ export default function App() {
               <SafeImage src={`${BASE}alx-logo.png`} alt="ALX" className="h-10 w-auto object-contain"/>
               <span className="font-black text-xl tracking-tight hidden sm:block" style={{ color:C.dark }}>ALX CREATIVE SHOWCASE</span>
             </div>
-            <div className="hidden md:flex items-center gap-8">
+            <div className="hidden md:flex items-center gap-6">
               <button onClick={() => nav('gallery')} className="text-sm font-black uppercase tracking-wide transition hover:opacity-70" style={{ color:C.dark }}>Gallery</button>
+              {authUser ? (
+                <>
+                  <button
+                    onClick={() => nav('profile', { name: authUser.displayName || authUser.email, email: authUser.email, userId: authUser.uid })}
+                    className="text-sm font-black uppercase tracking-wide transition hover:opacity-70" style={{ color:C.dark }}>
+                    My Profile
+                  </button>
+                  {isAdmin && (
+                    <button onClick={() => nav('admin')}
+                      className="text-sm font-black uppercase tracking-wide transition hover:opacity-70 flex items-center gap-1.5"
+                      style={{ color:C.purple }}>
+                      <Shield size={14}/> Admin
+                    </button>
+                  )}
+                  <button onClick={() => signOut(auth)} className="text-sm font-bold uppercase tracking-wide transition hover:opacity-70" style={{ color:`${C.dark}55` }}>
+                    Sign Out
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => openSignIn('signin')} className="text-sm font-black uppercase tracking-wide transition hover:opacity-70" style={{ color:C.dark }}>
+                  Sign In
+                </button>
+              )}
               <MagneticButton onClick={() => nav('submit')} variant="primary">Submit Work</MagneticButton>
             </div>
             <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden p-2 rounded-xl hover:bg-gray-100 transition">
@@ -549,16 +644,31 @@ export default function App() {
           <motion.div initial={{ opacity:0, y:-8 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.2 }}
             className="md:hidden border-t px-4 py-4 space-y-3" style={{ background:'rgba(250,250,248,0.98)', borderColor:'rgba(0,0,0,0.07)' }}>
             <button onClick={() => nav('gallery')} className="block w-full text-left font-black p-3 rounded-xl hover:bg-gray-50 transition text-sm uppercase tracking-wide">Gallery</button>
+            {authUser ? (
+              <>
+                <button onClick={() => { nav('profile', { name: authUser.displayName || authUser.email, email: authUser.email, userId: authUser.uid }); }} className="block w-full text-left font-black p-3 rounded-xl hover:bg-gray-50 transition text-sm uppercase tracking-wide">My Profile</button>
+                {isAdmin && (
+                  <button onClick={() => nav('admin')} className="block w-full text-left font-black p-3 rounded-xl hover:bg-gray-50 transition text-sm uppercase tracking-wide flex items-center gap-2" style={{ color:C.purple }}>
+                    <Shield size={14}/> Admin
+                  </button>
+                )}
+                <button onClick={() => signOut(auth)} className="block w-full text-left font-bold p-3 rounded-xl hover:bg-gray-50 transition text-sm uppercase tracking-wide" style={{ color:`${C.dark}55` }}>Sign Out</button>
+              </>
+            ) : (
+              <button onClick={() => openSignIn('signin')} className="block w-full text-left font-black p-3 rounded-xl hover:bg-gray-50 transition text-sm uppercase tracking-wide">Sign In</button>
+            )}
             <button onClick={() => nav('submit')} className="block w-full text-left font-black p-3 rounded-xl text-white text-sm" style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>Submit Work</button>
           </motion.div>
         )}
       </motion.nav>
 
       <main>
-        {view === 'home' && <HomeView nav={nav} projects={projects}/>}
-        {view === 'gallery' && <GalleryView nav={nav} projects={projects}/>}
-        {view === 'submit' && <SubmitView nav={nav} onSubmit={handleSubmit}/>}
-        {view === 'project' && <ProjectView nav={nav} project={selected}/>}
+        {view === 'home'    && <HomeView nav={nav} projects={projects} authUser={authUser} onSignInRequest={openSignIn}/>}
+        {view === 'gallery' && <GalleryView nav={nav} projects={projects} authUser={authUser} onSignInRequest={openSignIn}/>}
+        {view === 'submit'  && <SubmitView key={authUser?.uid || 'guest'} nav={nav} onSubmit={handleSubmit} authUser={authUser} onSignInRequest={openSignIn}/>}
+        {view === 'project' && <ProjectView nav={nav} project={selected} authUser={authUser} onSignInRequest={openSignIn}/>}
+        {view === 'profile' && <ProfileView nav={nav} projects={projects} creator={selected}/>}
+        {view === 'admin'   && <AdminView nav={nav} authUser={authUser} isAdmin={isAdmin}/>}
       </main>
 
       {/* ── FOOTER ──────────────────────────────────────────────────── */}
@@ -598,21 +708,14 @@ export default function App() {
 // ══════════════════════════════════════════════════════════════════════════════
 // HOME VIEW
 // ══════════════════════════════════════════════════════════════════════════════
-function HomeView({ nav, projects=[] }) {
+function HomeView({ nav, projects=[], authUser, onSignInRequest }) {
   const feat = useMemo(() => (projects || []).filter(p => p.featured).slice(0, 3), [projects]);
-  const heroRef = useRef(null);
-  const { scrollYProgress } = useScroll({ target:heroRef, offset:['start start','end start'] });
-  // FIX: Use GPU-friendly transform (translate) not percentage-based
-  const heroY = useTransform(scrollYProgress, [0, 1], [0, 200]);
-  const heroO = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
-  // FIX: Track if hero is visible to pause 3D when scrolled away
-  const heroInView = useInView(heroRef, { margin: '200px' });
 
   return (
     <div>
 
       {/* FRAME 1 — ENTRANCE — Creative Studio Aesthetic */}
-      <section ref={heroRef} className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden pt-20"
+      <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden pt-20"
         style={{ background:`linear-gradient(160deg, #FFFFFF 0%, ${C.palesky} 50%, ${C.lavender}40 100%)` }}>
 
         {/* Geometric background shapes */}
@@ -691,17 +794,8 @@ function HomeView({ nav, projects=[] }) {
           </div>
         </div>
 
-        {/* FIX: Hero3D lazy-loaded + only rendered when in viewport */}
-        {heroInView && (
-          <div className="absolute inset-0 z-[2] opacity-75 pointer-events-auto" style={{ mixBlendMode:'multiply' }}>
-            <Suspense fallback={null}>
-              <Hero3D/>
-            </Suspense>
-          </div>
-        )}
-
-        {/* Copy — FIX: use transform: translateY instead of percentage for GPU compositing */}
-        <motion.div style={{ y:heroY, opacity:heroO, willChange:'transform,opacity' }} className="relative z-[10] w-full max-w-6xl mx-auto px-6 text-center pointer-events-none">
+        {/* Hero copy — entrance animation only, no scroll-based transforms */}
+        <div className="relative z-[10] w-full max-w-6xl mx-auto px-6 text-center pointer-events-none">
           <motion.div variants={SC} initial="hidden" animate="show" className="pointer-events-auto">
 
             <motion.div variants={SU} className="inline-flex items-center gap-3 mb-10">
@@ -714,12 +808,12 @@ function HomeView({ nav, projects=[] }) {
             {/* FIX: Removed duplicate ghost AFRICA heading — it was a full extra paint layer */}
             <motion.h1 variants={SU} className="font-black tracking-tighter text-[3.5rem] sm:text-[5.5rem] md:text-[8rem] leading-[0.85] mb-3"
               style={{ color:C.dark }}>
-              AFRICA'S
+              ALX SHOWCASE
             </motion.h1>
 
             <motion.h2 variants={SU} className="font-black tracking-tighter leading-[0.88] mb-8 text-[2rem] sm:text-[3.2rem] md:text-[4.5rem]"
               style={{ background:`linear-gradient(135deg,${C.purple} 0%,${C.blue} 45%,${C.blue} 100%)`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
-              UNTAPPED<br/><span className="italic" style={{ fontWeight:800 }}>TALENT</span>
+              <span className="italic" style={{ fontWeight:800 }}>FESTIVE</span>
             </motion.h2>
 
             <motion.p variants={SU} className="text-base md:text-xl font-light max-w-xl mx-auto mb-10 leading-relaxed px-4"
@@ -736,17 +830,9 @@ function HomeView({ nav, projects=[] }) {
               </MagneticButton>
             </motion.div>
           </motion.div>
-        </motion.div>
+        </div>
 
         <div className="absolute bottom-0 left-0 right-0 z-20"><KenteDivider/></div>
-
-        {/* Scroll indicator — CSS animation */}
-        <div className="absolute bottom-7 left-1/2 z-20"
-          style={{ animation:'scrollBounce 2s ease-in-out infinite' }}>
-          <div className="w-6 h-10 rounded-full flex items-start justify-center p-1.5" style={{ border:`2px solid ${C.purple}60` }}>
-            <div className="w-1.5 h-2.5 rounded-full" style={{ background:C.purple, animation:'scrollDot 2s ease-in-out infinite' }}/>
-          </div>
-        </div>
       </section>
 
       {/* FRAME 2 — CURATOR'S GALLERY */}
@@ -781,7 +867,7 @@ function HomeView({ nav, projects=[] }) {
 
           <RevealSection className="grid grid-cols-1 md:grid-cols-12 gap-5">
             {feat.length > 0
-              ? feat.map((p, i) => <FeaturedCard key={p.id} project={p} index={i} onClick={pr => nav('project', pr)}/>)
+              ? feat.map((p, i) => <FeaturedCard key={p.id} project={p} index={i} onClick={pr => nav('project', pr)} authUser={authUser} onSignInRequest={onSignInRequest}/>)
               : <motion.div variants={SU} className="md:col-span-12 text-center py-24">
                   <p className="text-xl font-light text-gray-400">No featured projects yet.</p>
                   <button onClick={() => nav('submit')} className="mt-6 px-8 py-4 rounded-full font-black text-white shadow-lg" style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>Be the first to submit</button>
@@ -864,7 +950,33 @@ function HomeView({ nav, projects=[] }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // GALLERY VIEW
 // ══════════════════════════════════════════════════════════════════════════════
-function GalleryView({ nav, projects=[] }) {
+function GalleryLikeBtn({ project, authUser, onSignInRequest }) {
+  const [liked, setLiked] = useState(() => !!(authUser && project?.likedBy?.includes(authUser.uid)));
+  const [likes, setLikes] = useState(project?.likes || 0);
+  const handleLike = async (e) => {
+    e.stopPropagation();
+    if (!authUser) { onSignInRequest('signin'); return; }
+    if (!project.docId) return;
+    const ref = doc(db, 'projects', project.docId);
+    if (liked) {
+      setLiked(false); setLikes(c => Math.max(0, c - 1));
+      await updateDoc(ref, { likes: increment(-1), likedBy: arrayRemove(authUser.uid) }).catch(() => {});
+    } else {
+      setLiked(true); setLikes(c => c + 1);
+      await updateDoc(ref, { likes: increment(1), likedBy: arrayUnion(authUser.uid) }).catch(() => {});
+    }
+  };
+  return (
+    <button onClick={handleLike}
+      className="flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-full transition hover:scale-110 active:scale-95"
+      style={liked ? { background:`${C.blue}15`, color:C.blue } : { color:`${C.dark}50` }}
+      title={authUser ? (liked ? 'Unlike' : 'Like this project') : 'Sign in to like'}>
+      <Heart size={14} fill={liked ? 'currentColor' : 'none'} style={{ color: liked ? C.blue : `${C.dark}50` }}/>{likes}
+    </button>
+  );
+}
+
+function GalleryView({ nav, projects=[], authUser, onSignInRequest }) {
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const filters = ['All','Video','Visual','Audio','Writing'];
@@ -940,12 +1052,15 @@ function GalleryView({ nav, projects=[] }) {
                 <div className="flex justify-between items-start mb-4">
                   <span className="text-[10px] font-black uppercase tracking-widest border px-3 py-1.5 rounded-lg"
                     style={{ color:C.blue, borderColor:`${C.blue}25`, background:`${C.blue}08` }}>{project.program}</span>
-                  <div className="flex items-center gap-1.5 text-sm font-bold" style={{ color:`${C.dark}50` }}>
-                    <Heart size={14} fill="currentColor" style={{ color:C.blue }}/>{project.likes}
-                  </div>
+                  <GalleryLikeBtn project={project} authUser={authUser} onSignInRequest={onSignInRequest}/>
                 </div>
                 <h3 className="font-black text-2xl mb-1.5 leading-tight transition group-hover:opacity-75" style={{ color:C.dark }}>{project.title}</h3>
-                <p className="text-sm font-medium mb-6" style={{ color:`${C.dark}55` }}>{project.creator}</p>
+                <button
+                  onClick={(e) => { e.stopPropagation(); nav('profile', { name: project.creator, email: project.email, userId: project.userId, program: project.program, city: project.city, alxStatus: project.alxStatus, linkedin: project.linkedin, instagram: project.instagram, tiktok: project.tiktok }); }}
+                  className="text-sm font-medium mb-6 text-left hover:opacity-60 transition"
+                  style={{ color:`${C.dark}55` }}>
+                  {project.creator}
+                </button>
                 <div className="mt-auto flex items-center gap-1.5 text-sm font-medium pt-5 border-t" style={{ color:`${C.dark}40`, borderColor:'rgba(0,0,0,0.06)' }}>
                   <MapPin size={13}/>{project.city}
                 </div>
@@ -962,9 +1077,67 @@ function GalleryView({ nav, projects=[] }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // SUBMIT VIEW
 // ══════════════════════════════════════════════════════════════════════════════
-function SubmitView({ nav, onSubmit }) {
+function SubmitView({ nav, onSubmit, authUser, onSignInRequest }) {
   const [step, setStep] = useState(1);
-  const [fd, setFd] = useState({ title:'', creator:'', email:'', program:'Content Creation', city:'', category:'Visual', description:'', link:'', linkedin:'', tiktok:'', instagram:'', alxStatus:'Current Learner' });
+  const [fd, setFd] = useState(() => ({
+    title:'', creator: authUser?.displayName || '', email: authUser?.email || '',
+    program:'Content Creation', city:'', category:'Visual', description:'',
+    link:'', image:'', linkedin:'', tiktok:'', instagram:'', alxStatus:'Current Learner',
+  }));
+  const [uploadProgress, setUploadProgress] = useState(null); // null | 0–100 | 'done' | 'error'
+  const [uploadedFileName, setUploadedFileName] = useState('');
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadedFileName(file.name);
+    setUploadProgress(0);
+    const fileRef = storageRef(storage, `submissions/${authUser.uid}/${Date.now()}_${file.name}`);
+    const task = uploadBytesResumable(fileRef, file);
+    task.on('state_changed',
+      snap => setUploadProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+      ()   => setUploadProgress('error'),
+      async () => {
+        const url = await getDownloadURL(task.snapshot.ref);
+        const isImage = file.type.startsWith('image/');
+        setFd(prev => ({ ...prev, link: url, image: isImage ? url : FALLBACK_IMG }));
+        setUploadProgress('done');
+      }
+    );
+  };
+
+  // Gate: must be signed in to see the form
+  if (!authUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ background:C.offwhite }}>
+        <div className="max-w-md w-full text-center mt-20">
+          <div className="rounded-3xl shadow-xl p-12" style={{ background:'white', border:'1px solid rgba(0,0,0,0.06)' }}>
+            <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
+              style={{ background:`linear-gradient(135deg,${C.purple}20,${C.blue}20)` }}>
+              <Upload size={32} style={{ color:C.purple }}/>
+            </div>
+            <h2 className="text-3xl font-black mb-3 tracking-tight" style={{ color:C.dark }}>Submit Your Work</h2>
+            <p className="mb-8 text-base font-light leading-relaxed" style={{ color:`${C.dark}55` }}>
+              Create a free account to submit your work and build your public creator profile.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button onClick={() => onSignInRequest('signup')}
+                className="w-full py-4 rounded-2xl font-black text-white shadow-lg transition hover:opacity-90"
+                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
+                Create Free Account
+              </button>
+              <button onClick={() => onSignInRequest('signin')}
+                className="w-full py-4 rounded-2xl font-black transition"
+                style={{ color:C.dark, border:'1.5px solid rgba(0,0,0,0.1)' }}>
+                Sign In
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault();
     let linkedinUrl = fd.linkedin.trim();
@@ -972,10 +1145,9 @@ function SubmitView({ nav, onSubmit }) {
       linkedinUrl = 'https://' + linkedinUrl;
     }
     let postLink = fd.link.trim();
-    if (postLink && !postLink.startsWith('http') && !postLink.startsWith('blob:')) {
-      postLink = 'https://' + postLink;
-    }
-    onSubmit({...fd, link:postLink, image:postLink||FALLBACK_IMG, linkedin:linkedinUrl, tiktok:fd.tiktok.trim(), instagram:fd.instagram.trim(), id:Date.now(), likes:0, tags:[], comments:[]});
+    if (postLink && !postLink.startsWith('http')) postLink = 'https://' + postLink;
+    const image = fd.image || (postLink ? FALLBACK_IMG : FALLBACK_IMG);
+    onSubmit({ ...fd, link:postLink, image, linkedin:linkedinUrl, tiktok:fd.tiktok.trim(), instagram:fd.instagram.trim(), id:Date.now(), likes:0, tags:[], comments:[] });
   };
   const inp = "w-full bg-white border rounded-2xl px-5 py-4 focus:outline-none text-base font-medium shadow-sm transition";
   const inpStyle = { borderColor:'rgba(0,0,0,0.1)', color:C.dark };
@@ -1064,35 +1236,62 @@ function SubmitView({ nav, onSubmit }) {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Media Link / Upload</label>
-                      <div className="border-2 border-dashed rounded-2xl p-10 text-center transition group" style={{ borderColor:'rgba(0,0,0,0.12)', background:'rgba(95,61,196,0.02)' }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = C.purple} onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'}>
-                        <input type="file" id="fu" className="hidden" accept="image/*,video/*" onChange={e => { const f = e.target.files[0]; if (f) setFd({...fd, link:URL.createObjectURL(f)}); }}/>
+                      <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Media / File Upload</label>
+                      <div className="border-2 border-dashed rounded-2xl p-8 text-center transition group" style={{ borderColor: uploadProgress === 'done' ? C.green : 'rgba(0,0,0,0.12)', background:'rgba(95,61,196,0.02)' }}
+                        onMouseEnter={e => { if (uploadProgress !== 'done') e.currentTarget.style.borderColor = C.purple; }} onMouseLeave={e => { if (uploadProgress !== 'done') e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'; }}>
+                        <input type="file" id="fu" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.ppt,.pptx" onChange={handleFileChange}/>
                         <label htmlFor="fu" className="cursor-pointer block">
-                          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition" style={{ background:`${C.purple}12` }}>
-                            <Upload size={28} style={{ color:C.purple }}/>
+                          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition" style={{ background: uploadProgress === 'done' ? `${C.green}15` : `${C.purple}12` }}>
+                            {uploadProgress === 'done'
+                              ? <CheckCircle size={28} style={{ color:C.green }}/>
+                              : uploadProgress === 'error'
+                              ? <X size={28} style={{ color:'#EF4444' }}/>
+                              : <Upload size={28} style={{ color:C.purple }}/>}
                           </div>
-                          <p className="text-base font-bold" style={{ color:C.dark }}>
-                            {fd.link?.startsWith('blob:')
-                              ? <span className="flex items-center justify-center gap-2" style={{ color:C.green }}><CheckCircle size={17}/>File Selected</span>
-                              : 'Click to browse files'}
-                          </p>
-                          <p className="text-xs mt-1" style={{ color:`${C.dark}40` }}>Supports JPG, PNG, MP4</p>
+                          {uploadProgress === null && (
+                            <>
+                              <p className="text-base font-bold" style={{ color:C.dark }}>Click to browse files</p>
+                              <p className="text-xs mt-1" style={{ color:`${C.dark}40` }}>Images · Video · Audio · PDF · Word · PowerPoint</p>
+                            </>
+                          )}
+                          {typeof uploadProgress === 'number' && (
+                            <div className="mt-2">
+                              <p className="text-sm font-bold mb-2 truncate" style={{ color:C.dark }}>{uploadedFileName}</p>
+                              <div className="w-full h-2 rounded-full overflow-hidden" style={{ background:'rgba(0,0,0,0.08)' }}>
+                                <div className="h-full rounded-full transition-all duration-300" style={{ width:`${uploadProgress}%`, background:`linear-gradient(90deg,${C.purple},${C.blue})` }}/>
+                              </div>
+                              <p className="text-xs mt-1.5 font-bold" style={{ color:C.purple }}>{uploadProgress}% uploaded…</p>
+                            </div>
+                          )}
+                          {uploadProgress === 'done' && (
+                            <div className="mt-1">
+                              <p className="text-sm font-bold" style={{ color:C.green }}>Upload complete!</p>
+                              <p className="text-xs mt-0.5 truncate" style={{ color:`${C.dark}50` }}>{uploadedFileName}</p>
+                              <p className="text-xs mt-1 underline" style={{ color:C.purple }}>Click to replace file</p>
+                            </div>
+                          )}
+                          {uploadProgress === 'error' && (
+                            <div className="mt-1">
+                              <p className="text-sm font-bold" style={{ color:'#EF4444' }}>Upload failed</p>
+                              <p className="text-xs mt-0.5" style={{ color:`${C.dark}50` }}>Check your connection and try again</p>
+                              <p className="text-xs mt-1 underline" style={{ color:C.purple }}>Click to retry</p>
+                            </div>
+                          )}
                         </label>
-                        <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor:'rgba(0,0,0,0.08)' }}/></div><div className="relative flex justify-center"><span className="px-4 text-xs uppercase font-black tracking-widest bg-white rounded-full" style={{ color:`${C.dark}40` }}>Or paste social / media URL</span></div></div>
-                        <input type="text" placeholder="Paste link from LinkedIn, Instagram, TikTok, X, Facebook, YouTube…"
-                          className="w-full border rounded-xl p-3.5 text-sm focus:outline-none bg-white shadow-sm"
-                          style={{ borderColor:'rgba(0,0,0,0.1)', color:C.dark }}
-                          value={!fd.link?.startsWith('blob:') ? fd.link : ''} onChange={e => setFd({...fd, link:e.target.value})}
-                          onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
-                        {detectedPlatform && (
-                          <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl" style={{ background:`${C.green}10`, border:`1px solid ${C.green}25` }}>
-                            <CheckCircle size={14} style={{ color:C.green }}/>
-                            <span className="text-xs font-bold" style={{ color:C.green }}>Detected: {detectedPlatform}</span>
-                            <span className="text-xs" style={{ color:`${C.dark}40` }}>— will display as embedded content or link card</span>
-                          </div>
-                        )}
                       </div>
+                      <div className="relative my-5"><div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor:'rgba(0,0,0,0.08)' }}/></div><div className="relative flex justify-center"><span className="px-4 text-xs uppercase font-black tracking-widest bg-white rounded-full" style={{ color:`${C.dark}40` }}>Or paste a link instead</span></div></div>
+                      <input type="text" placeholder="LinkedIn, Instagram, TikTok, YouTube, SoundCloud, Google Drive…"
+                        className="w-full border rounded-xl p-3.5 text-sm focus:outline-none bg-white shadow-sm"
+                        style={{ borderColor:'rgba(0,0,0,0.1)', color:C.dark }}
+                        value={uploadProgress === 'done' ? '' : fd.link} onChange={e => setFd({...fd, link:e.target.value})}
+                        onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                      {detectedPlatform && uploadProgress !== 'done' && (
+                        <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl" style={{ background:`${C.green}10`, border:`1px solid ${C.green}25` }}>
+                          <CheckCircle size={14} style={{ color:C.green }}/>
+                          <span className="text-xs font-bold" style={{ color:C.green }}>Detected: {detectedPlatform}</span>
+                          <span className="text-xs" style={{ color:`${C.dark}40` }}>— will display as embedded content or link card</span>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Description</label>
@@ -1121,8 +1320,11 @@ function SubmitView({ nav, onSubmit }) {
                         className="flex-1 py-4 rounded-2xl font-black text-base transition"
                         style={{ background:'white', color:C.dark, border:'1.5px solid rgba(0,0,0,0.1)' }}>Back</motion.button>
                       <motion.button whileTap={{ scale:0.97 }} type="submit"
-                        className="flex-[2] py-4 rounded-2xl font-black text-white text-base shadow-xl"
-                        style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>Submit Project ✦</motion.button>
+                        disabled={typeof uploadProgress === 'number'}
+                        className="flex-[2] py-4 rounded-2xl font-black text-white text-base shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
+                        {typeof uploadProgress === 'number' ? `Uploading ${uploadProgress}%…` : 'Submit Project ✦'}
+                      </motion.button>
                     </div>
                   </motion.div>
                 )}
@@ -1138,14 +1340,39 @@ function SubmitView({ nav, onSubmit }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // PROJECT VIEW
 // ══════════════════════════════════════════════════════════════════════════════
-function ProjectView({ nav, project }) {
-  const [liked, setLiked] = useState(false);
-  const [likes, setLikes] = useState(project?.likes || 0);
+function ProjectView({ nav, project, authUser, onSignInRequest }) {
+  // likeOverride: null = derive from props, true/false = user has toggled in this session
+  const [likeOverride, setLikeOverride] = useState(null);
+  const [likeDelta, setLikeDelta] = useState(0);
+  const [likeLoading, setLikeLoading] = useState(false);
   const [comments, setComments] = useState(project?.comments || []);
   const [commentText, setCommentText] = useState('');
   const [commentName, setCommentName] = useState('');
+
   if (!project) return null;
+
+  // Derive liked/likes from props + any local override
+  const liked = likeOverride !== null ? likeOverride : !!(authUser && project?.likedBy?.includes(authUser.uid));
+  const likes = (project?.likes || 0) + likeDelta;
   const isExt = url => url && (url.includes('http') || url.includes('www'));
+
+  const handleLike = async () => {
+    if (!authUser) { onSignInRequest('signin'); return; }
+    if (likeLoading || !project.docId) return;
+    setLikeLoading(true);
+    const ref = doc(db, 'projects', project.docId);
+    if (liked) {
+      setLikeOverride(false);
+      setLikeDelta(d => d - 1);
+      await updateDoc(ref, { likes: increment(-1), likedBy: arrayRemove(authUser.uid) }).catch(() => {});
+    } else {
+      setLikeOverride(true);
+      setLikeDelta(d => d + 1);
+      await updateDoc(ref, { likes: increment(1), likedBy: arrayUnion(authUser.uid) }).catch(() => {});
+    }
+    setLikeLoading(false);
+  };
+
   const addComment = () => {
     if (!commentText.trim() || !commentName.trim()) return;
     setComments(prev => [...prev, { name:commentName.trim(), text:commentText.trim(), date:new Date().toLocaleDateString() }]);
@@ -1218,24 +1445,22 @@ function ProjectView({ nav, project }) {
                   <div className="text-sm flex items-center gap-1.5 font-medium" style={{ color:`${C.dark}50` }}><MapPin size={13}/>{project.city}</div>
                 </div>
               </div>
-              <a href={(() => {
-                  const url = project.linkedin || 'https://www.linkedin.com/';
-                  if (!url) return 'https://www.linkedin.com/';
-                  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-                  return 'https://' + url;
-                })()} target="_blank" rel="noopener noreferrer"
+              <button
+                onClick={() => nav('profile', { name: project.creator, email: project.email, userId: project.userId, program: project.program, city: project.city, alxStatus: project.alxStatus, linkedin: project.linkedin, instagram: project.instagram, tiktok: project.tiktok })}
                 className="block w-full text-center font-black py-3.5 rounded-2xl text-white shadow-lg transition hover:opacity-90"
-                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>View Profile</a>
+                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>View Full Profile</button>
             </div>
             <div className="rounded-3xl p-8 shadow-lg" style={{ background:'white', border:'1px solid rgba(0,0,0,0.06)' }}>
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em]" style={{ color:`${C.dark}40` }}>Engagement</h3>
                 <span className="text-xs font-black px-3 py-1.5 rounded-lg" style={{ background:`${C.blue}12`, color:C.blue }}>HOT</span>
               </div>
-              <button onClick={() => { setLiked(!liked); setLikes(c => liked ? c-1 : c+1); }}
-                className={`w-full py-4 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all border ${liked ? '' : 'hover:opacity-80'}`}
+              <button onClick={handleLike} disabled={likeLoading}
+                className={`w-full py-4 rounded-2xl font-black text-xl flex items-center justify-center gap-3 transition-all border disabled:opacity-60 ${liked ? '' : 'hover:opacity-80'}`}
                 style={liked ? { background:`${C.blue}10`, borderColor:`${C.blue}30`, color:C.blue } : { background:'white', borderColor:`${C.blue}20`, color:C.blue }}>
-                <Heart fill={liked ? 'currentColor' : 'none'} size={22} style={{ transform:liked ? 'scale(1.2)' : 'scale(1)', transition:'transform 0.2s' }}/>{likes}
+                <Heart fill={liked ? 'currentColor' : 'none'} size={22} style={{ transform:liked ? 'scale(1.2)' : 'scale(1)', transition:'transform 0.2s' }}/>
+                {likes}
+                {!authUser && <span className="text-sm font-medium opacity-60 ml-1">(sign in to like)</span>}
               </button>
             </div>
 
@@ -1314,6 +1539,552 @@ function ProjectView({ nav, project }) {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTH MODAL — sign in / sign up
+// ══════════════════════════════════════════════════════════════════════════════
+function AuthModal({ mode: initialMode, onClose, onSuccess }) {
+  const [mode, setMode] = useState(initialMode || 'signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const inp = "w-full border rounded-2xl px-5 py-4 focus:outline-none text-base font-medium transition";
+  const inpStyle = { borderColor:'rgba(0,0,0,0.1)', color:C.dark };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      if (mode === 'signup') {
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(cred.user, { displayName: name });
+        setDoc(doc(db, 'users', cred.user.uid), { name, email, createdAt: Date.now() }).catch(() => {});
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+      onSuccess();
+    } catch (err) {
+      setError(err.message.replace('Firebase: ', '').replace(/\s*\(auth\/[^)]+\)\.?/, '').trim());
+    }
+    setLoading(false);
+  };
+
+  const handleGoogle = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const cred = await signInWithPopup(auth, provider);
+      const u = cred.user;
+      // Save to Firestore on first sign-in (setDoc with merge won't overwrite existing data)
+      setDoc(doc(db, 'users', u.uid), { name: u.displayName || '', email: u.email, createdAt: Date.now() }, { merge: true }).catch(() => {});
+      onSuccess();
+    } catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user') {
+        setError(err.message.replace('Firebase: ', '').replace(/\s*\(auth\/[^)]+\)\.?/, '').trim());
+      }
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background:'rgba(0,0,0,0.6)' }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <motion.div initial={{ opacity:0, scale:0.96 }} animate={{ opacity:1, scale:1 }} transition={{ duration:0.2 }}
+        className="w-full max-w-md rounded-3xl shadow-2xl overflow-hidden relative" style={{ background:'white' }}>
+        <div className="h-1.5" style={{ background:`linear-gradient(90deg,${C.purple},${C.blue})` }}/>
+        <button onClick={onClose} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 transition z-10">
+          <X size={20} style={{ color:`${C.dark}60` }}/>
+        </button>
+        <div className="p-10">
+          <h2 className="text-3xl font-black mb-1 tracking-tight" style={{ color:C.dark }}>
+            {mode === 'signin' ? 'Welcome back' : 'Join the Showcase'}
+          </h2>
+          <p className="mb-8 font-light" style={{ color:`${C.dark}55` }}>
+            {mode === 'signin' ? 'Sign in to submit and manage your work.' : 'Create a free account and build your creator profile.'}
+          </p>
+
+          {/* Google sign-in */}
+          <button onClick={handleGoogle} disabled={loading}
+            className="w-full py-3.5 rounded-2xl font-black text-base border flex items-center justify-center gap-3 transition hover:bg-gray-50 disabled:opacity-60 mb-5"
+            style={{ borderColor:'rgba(0,0,0,0.12)', color:C.dark }}>
+            {/* Google "G" logo */}
+            <svg width="20" height="20" viewBox="0 0 48 48">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+              <path fill="none" d="M0 0h48v48H0z"/>
+            </svg>
+            Continue with Google
+          </button>
+
+          {/* Divider */}
+          <div className="relative mb-5">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor:'rgba(0,0,0,0.08)' }}/></div>
+            <div className="relative flex justify-center"><span className="px-4 text-xs uppercase font-black tracking-widest bg-white" style={{ color:`${C.dark}35` }}>or continue with email</span></div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {mode === 'signup' && (
+              <div>
+                <label className="block text-xs font-black mb-2 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Full Name</label>
+                <input required value={name} onChange={e => setName(e.target.value)} placeholder="Jane Doe"
+                  className={inp} style={inpStyle}
+                  onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-black mb-2 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Email</label>
+              <input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@example.com"
+                className={inp} style={inpStyle}
+                onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+            </div>
+            <div>
+              <label className="block text-xs font-black mb-2 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Password</label>
+              <input required type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" minLength={6}
+                className={inp} style={inpStyle}
+                onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+            </div>
+            {error && (
+              <p className="text-sm font-medium px-4 py-3 rounded-xl" style={{ background:`${C.yellow}25`, color:'#92400e' }}>{error}</p>
+            )}
+            <button type="submit" disabled={loading}
+              className="w-full py-4 rounded-2xl font-black text-white text-base shadow-xl transition hover:opacity-90 disabled:opacity-60 flex items-center justify-center"
+              style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
+              {loading ? <Loader size={20} className="animate-spin"/> : mode === 'signin' ? 'Sign In' : 'Create Account'}
+            </button>
+          </form>
+          <p className="text-center text-sm mt-6" style={{ color:`${C.dark}50` }}>
+            {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
+            <button onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); }}
+              className="font-black transition hover:opacity-70" style={{ color:C.purple }}>
+              {mode === 'signin' ? 'Sign Up' : 'Sign In'}
+            </button>
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PROFILE VIEW — public creator profile with all their work
+// ══════════════════════════════════════════════════════════════════════════════
+function ProfileView({ nav, projects, creator }) {
+  // Hooks must run unconditionally — guard inside the callbacks instead
+  const creatorProjects = useMemo(() => {
+    if (!creator) return [];
+    return (projects || []).filter(p =>
+      p.creator === creator.name ||
+      (creator.email && p.email === creator.email) ||
+      (creator.userId && p.userId === creator.userId)
+    );
+  }, [projects, creator]);
+
+  // Redirect in an effect, not during render
+  useEffect(() => {
+    if (!creator) nav('gallery');
+  }, [creator, nav]);
+
+  if (!creator) return null;
+
+  // Fill missing profile fields from the most recent project
+  const ref = creatorProjects[0] || {};
+  const program    = creator.program    || ref.program    || '';
+  const city       = creator.city       || ref.city       || '';
+  const linkedin   = creator.linkedin   || ref.linkedin   || '';
+  const instagram  = creator.instagram  || ref.instagram  || '';
+  const tiktok     = creator.tiktok     || ref.tiktok     || '';
+  const alxStatus  = creator.alxStatus  || ref.alxStatus  || '';
+  const totalLikes = creatorProjects.reduce((sum, p) => sum + (p.likes || 0), 0);
+
+  return (
+    <div className="min-h-screen" style={{ background:C.offwhite }}>
+      <KenteDivider/>
+
+      {/* ── Profile hero ─────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden" style={{ background:`linear-gradient(160deg,${C.navy} 0%,#061A5E 100%)` }}>
+        <PaintSplash color={C.purple} size={350} style={{ top:'-5%', left:'-5%', transform:'rotate(30deg)' }} className="opacity-25"/>
+        <PaintSplash color={C.blue}   size={300} style={{ bottom:'-8%', right:'-3%', transform:'rotate(180deg)' }} className="opacity-20"/>
+        <PaintSplash color={C.green}  size={180} style={{ top:'40%', right:'12%', transform:'rotate(-45deg)' }} className="opacity-15"/>
+
+        <div className="max-w-5xl mx-auto px-6 py-24 relative z-10">
+          <button onClick={() => nav('gallery')} className="mb-12 inline-flex items-center gap-2 font-bold text-sm px-5 py-2.5 rounded-full transition hover:opacity-80"
+            style={{ color:'rgba(255,255,255,0.7)', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)' }}>
+            <ArrowLeft size={15}/> Back to Gallery
+          </button>
+
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
+            {/* Avatar */}
+            <div className="w-32 h-32 rounded-full flex items-center justify-center text-5xl font-black text-white shadow-2xl flex-shrink-0"
+              style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})`, border:'4px solid rgba(255,255,255,0.15)' }}>
+              {creator.name?.charAt(0)?.toUpperCase() || '?'}
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
+                <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white">{creator.name}</h1>
+                {alxStatus && (
+                  <span className="text-xs font-black px-3 py-1.5 rounded-full uppercase tracking-widest"
+                    style={{ background:`${C.green}25`, color:C.green, border:`1px solid ${C.green}35` }}>
+                    {alxStatus}
+                  </span>
+                )}
+              </div>
+              {program && <p className="font-black text-lg mb-1" style={{ color:C.purple }}>{program}</p>}
+              {city && (
+                <p className="flex items-center gap-1.5 text-sm font-medium mb-5" style={{ color:'rgba(255,255,255,0.45)' }}>
+                  <MapPin size={13}/>{city}
+                </p>
+              )}
+              {/* Social links */}
+              <div className="flex flex-wrap gap-3">
+                {linkedin && (
+                  <a href={linkedin.startsWith('http') ? linkedin : `https://${linkedin}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition hover:opacity-80"
+                    style={{ background:`${C.blue}30`, color:'white', border:`1px solid ${C.blue}40` }}>
+                    <Linkedin size={14}/> LinkedIn
+                  </a>
+                )}
+                {instagram && (
+                  <a href={instagram.startsWith('http') ? instagram : `https://${instagram}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition hover:opacity-80"
+                    style={{ background:'rgba(255,255,255,0.08)', color:'white', border:'1px solid rgba(255,255,255,0.15)' }}>
+                    <Instagram size={14}/> Instagram
+                  </a>
+                )}
+                {tiktok && (
+                  <a href={tiktok.startsWith('http') ? tiktok : `https://${tiktok}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition hover:opacity-80"
+                    style={{ background:'rgba(255,255,255,0.08)', color:'white', border:'1px solid rgba(255,255,255,0.15)' }}>
+                    <Play size={14}/> TikTok
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Stats bar */}
+          <div className="flex gap-12 mt-14 pt-10 border-t" style={{ borderColor:'rgba(255,255,255,0.1)' }}>
+            <div>
+              <div className="text-4xl font-black text-white">{creatorProjects.length}</div>
+              <div className="text-xs font-black uppercase tracking-[0.2em] mt-1" style={{ color:'rgba(255,255,255,0.35)' }}>Works</div>
+            </div>
+            <div>
+              <div className="text-4xl font-black text-white">{totalLikes}</div>
+              <div className="text-xs font-black uppercase tracking-[0.2em] mt-1" style={{ color:'rgba(255,255,255,0.35)' }}>Total Likes</div>
+            </div>
+            {program && (
+              <div>
+                <div className="text-lg font-black text-white leading-tight">{program}</div>
+                <div className="text-xs font-black uppercase tracking-[0.2em] mt-1" style={{ color:'rgba(255,255,255,0.35)' }}>Program</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+      <KenteDivider/>
+
+      {/* ── Projects grid ────────────────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-16">
+        <RevealSection>
+          <motion.h2 variants={SU} className="text-3xl font-black tracking-tight mb-12" style={{ color:C.dark }}>
+            {creator.name?.split(' ')[0]}'s Work
+            <span className="ml-3 text-lg font-bold" style={{ color:`${C.dark}35` }}>({creatorProjects.length})</span>
+          </motion.h2>
+        </RevealSection>
+
+        {creatorProjects.length === 0 ? (
+          <div className="text-center py-24">
+            <p className="text-xl font-light mb-6" style={{ color:`${C.dark}40` }}>No submissions found for this creator yet.</p>
+            <button onClick={() => nav('gallery')} className="px-8 py-4 rounded-full font-black text-white shadow-lg"
+              style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>Browse the Gallery</button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {creatorProjects.map((project, i) => (
+              <motion.div key={project.id}
+                initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }}
+                transition={{ delay: Math.min(i * 0.05, 0.3), type:'spring', stiffness:80, damping:20 }}
+                onClick={() => nav('project', project)}
+                className="group rounded-3xl overflow-hidden cursor-pointer flex flex-col hover:-translate-y-2 transition-all duration-500"
+                style={{ background:'white', boxShadow:'0 4px 20px rgba(0,0,0,0.07)', border:'1px solid rgba(0,0,0,0.05)', contain:'layout style' }}>
+                <div className="relative aspect-video overflow-hidden bg-gray-100">
+                  <SafeImage src={project.image} alt={project.title}
+                    className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"/>
+                  <div className="absolute top-4 right-4 text-white p-2.5 rounded-full" style={{ background:'rgba(0,0,0,0.35)' }}>
+                    {project.category === 'Video'   && <Play     size={16} fill="currentColor"/>}
+                    {project.category === 'Audio'   && <Music    size={16}/>}
+                    {project.category === 'Writing' && <FileText size={16}/>}
+                    {project.category === 'Visual'  && <ImageIcon size={16}/>}
+                  </div>
+                </div>
+                <div className="p-6 flex flex-col flex-grow">
+                  <span className="text-[10px] font-black uppercase tracking-widest border px-3 py-1.5 rounded-lg mb-3 w-fit"
+                    style={{ color:C.blue, borderColor:`${C.blue}25`, background:`${C.blue}08` }}>{project.program}</span>
+                  <h3 className="font-black text-xl mb-1 leading-tight transition group-hover:opacity-75" style={{ color:C.dark }}>{project.title}</h3>
+                  <div className="mt-auto flex items-center justify-between pt-4 border-t" style={{ borderColor:'rgba(0,0,0,0.06)' }}>
+                    <span className="text-sm font-medium flex items-center gap-1.5" style={{ color:`${C.dark}40` }}>
+                      <MapPin size={13}/>{project.city}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-sm font-bold" style={{ color:`${C.dark}50` }}>
+                      <Heart size={13} fill="currentColor" style={{ color:C.blue }}/>{project.likes || 0}
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Admin table columns (defined outside component — stable reference) ────────
+const ADMIN_COLS = [
+  { key: 'createdAt', label: 'Date' },
+  { key: 'creator',   label: 'Name' },
+  { key: 'email',     label: 'Email' },
+  { key: 'program',   label: 'Program' },
+  { key: 'city',      label: 'City' },
+  { key: 'alxStatus', label: 'Status' },
+  { key: 'category',  label: 'Category' },
+  { key: 'title',     label: 'Title' },
+  { key: 'link',      label: 'Link' },
+  { key: '_source',   label: 'Source' },
+];
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ADMIN VIEW — submissions dashboard (admin emails only)
+// ══════════════════════════════════════════════════════════════════════════════
+function AdminView({ nav, authUser, isAdmin }) {
+  const [rows, setRows]       = useState([]);
+  const [loading, setLoading] = useState(true); // true until first fetch completes
+  const [search, setSearch]   = useState('');
+  const [sortKey, setSortKey] = useState('createdAt');
+  const [sortDir, setSortDir] = useState('desc');
+
+  // Hard redirect — non-admins never see data
+  useEffect(() => {
+    if (!isAdmin) nav('home');
+  }, [isAdmin, nav]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    // loading is already true from useState initialiser — no setState needed here
+    Promise.all([fetchProjectsFromFirestore(), fetchSubmissionsFromSheet()])
+      .then(([fsRows, sheetRows]) => {
+        const tagged = [
+          ...fsRows.map(r => ({ ...r, _source: 'Firestore' })),
+          ...sheetRows.map(r => ({ ...r, _source: 'Sheets' })),
+        ];
+        const seen = new Set();
+        const deduped = tagged.filter(r => {
+          const key = `${(r.email || '').toLowerCase()}|${(r.title || '').toLowerCase()}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setRows(deduped);
+        setLoading(false);
+      });
+  }, [isAdmin]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return rows
+      .filter(r => !q || ADMIN_COLS.some(c => String(r[c.key] || '').toLowerCase().includes(q)))
+      .sort((a, b) => {
+        const av = sortKey === 'createdAt' ? (a[sortKey] || 0) : String(a[sortKey] || '').toLowerCase();
+        const bv = sortKey === 'createdAt' ? (b[sortKey] || 0) : String(b[sortKey] || '').toLowerCase();
+        if (av < bv) return sortDir === 'asc' ? -1 : 1;
+        if (av > bv) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [rows, search, sortKey, sortDir]);
+
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  const exportCSV = () => {
+    const exportCols = ['createdAt','creator','email','program','city','alxStatus','category','title','link','description','linkedin','instagram','tiktok','_source'];
+    const header = exportCols.join(',');
+    const rowsCsv = filtered.map(r =>
+      exportCols.map(k => {
+        const val = k === 'createdAt' && r[k] ? new Date(r[k]).toLocaleDateString() : (r[k] || '');
+        return `"${String(val).replace(/"/g, '""')}"`;
+      }).join(',')
+    );
+    const blob = new Blob([[header, ...rowsCsv].join('\n')], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href: url, download: `alx-submissions-${new Date().toISOString().slice(0,10)}.csv` });
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const SOURCE_STYLE = {
+    Firestore: { bg: `${C.purple}25`, color: C.purple },
+    Sheets:    { bg: '#EAB30825',     color: '#92400e' },
+  };
+  const STATUS_STYLE = {
+    'Current Learner': { bg: `${C.green}20`,  color: C.green },
+    'Alumni':          { bg: `${C.blue}20`,   color: C.blue  },
+    'Applicant':       { bg: '#EAB30820',     color: '#92400e' },
+  };
+
+  if (!isAdmin) return null;
+
+  return (
+    <div className="min-h-screen" style={{ background:'#0F172A', color:'#E2E8F0', fontFamily:"'Poppins',system-ui,sans-serif" }}>
+
+      {/* ── Header bar ──────────────────────────────────────────────── */}
+      <div className="border-b px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        style={{ borderColor:'rgba(255,255,255,0.07)', background:'#0B1120' }}>
+        <div className="flex items-center gap-4">
+          <button onClick={() => nav('home')} className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest transition hover:opacity-80" style={{ color:'#475569' }}>
+            <ArrowLeft size={13}/> Site
+          </button>
+          <div className="w-px h-5" style={{ background:'rgba(255,255,255,0.1)' }}/>
+          <div className="flex items-center gap-2">
+            <Shield size={16} style={{ color:C.purple }}/>
+            <span className="font-black text-lg text-white tracking-tight">Admin Dashboard</span>
+          </div>
+        </div>
+        <span className="text-xs font-medium" style={{ color:C.purple }}>{authUser?.email}</span>
+      </div>
+
+      <div className="px-4 sm:px-6 py-6">
+
+        {/* ── Stat cards ─────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          {[
+            { label:'Total Submissions', value: rows.length,                                              color: C.purple },
+            { label:'From Firestore',    value: rows.filter(r => r._source === 'Firestore').length,       color: C.blue   },
+            { label:'From Sheets',       value: rows.filter(r => r._source === 'Sheets').length,          color: '#EAB308'},
+            { label:'Unique Programs',   value: new Set(rows.map(r => r.program).filter(Boolean)).size,   color: C.green  },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="rounded-2xl p-5 border" style={{ background:'#0B1120', borderColor:'rgba(255,255,255,0.07)' }}>
+              <div className="text-3xl font-black mb-1" style={{ color }}>{loading ? '—' : value}</div>
+              <div className="text-xs font-bold uppercase tracking-widest" style={{ color:'#475569' }}>{label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Toolbar ─────────────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-4 items-stretch sm:items-center">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color:'#475569' }}/>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search name, email, program, city, title…"
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm focus:outline-none border"
+              style={{ background:'#0B1120', borderColor:'rgba(255,255,255,0.1)', color:'#E2E8F0' }}/>
+          </div>
+          <span className="text-sm font-medium self-center" style={{ color:'#475569' }}>
+            {!loading && `${filtered.length} row${filtered.length !== 1 ? 's' : ''}`}
+          </span>
+          <button onClick={exportCSV} disabled={loading || filtered.length === 0}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition hover:opacity-80 disabled:opacity-40"
+            style={{ background:C.purple, color:'white' }}>
+            <Download size={15}/> Export CSV
+          </button>
+        </div>
+
+        {/* ── Table ───────────────────────────────────────────────── */}
+        {loading ? (
+          <div className="flex items-center justify-center py-32">
+            <Loader size={28} className="animate-spin" style={{ color:C.purple }}/>
+            <span className="ml-3 text-sm font-medium" style={{ color:'#475569' }}>Loading submissions…</span>
+          </div>
+        ) : (
+          <div className="rounded-2xl border overflow-hidden" style={{ borderColor:'rgba(255,255,255,0.07)' }}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr style={{ background:'#0B1120', borderBottom:'1px solid rgba(255,255,255,0.07)' }}>
+                    {ADMIN_COLS.map(col => (
+                      <th key={col.key} onClick={() => toggleSort(col.key)}
+                        className="text-left px-4 py-3 font-black text-xs uppercase tracking-widest whitespace-nowrap cursor-pointer select-none transition hover:opacity-80"
+                        style={{ color: sortKey === col.key ? C.purple : '#475569' }}>
+                        <span className="flex items-center gap-1">
+                          {col.label}
+                          {sortKey === col.key
+                            ? (sortDir === 'asc' ? <ChevronUp size={12}/> : <ChevronDown size={12}/>)
+                            : <ChevronDown size={12} style={{ opacity:0 }}/>}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r, i) => (
+                    <tr key={r.id || i} className="hover:bg-white/5 transition-colors"
+                      style={{ borderBottom:'1px solid rgba(255,255,255,0.04)', background: i%2===0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+
+                      <td className="px-4 py-3 whitespace-nowrap text-xs" style={{ color:'#475569' }}>
+                        {r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap font-semibold text-white">{r.creator || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <a href={`mailto:${r.email}`} className="transition hover:text-white" style={{ color:'#94A3B8' }}>{r.email || '—'}</a>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs" style={{ color:'#94A3B8' }}>{r.program || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs" style={{ color:'#94A3B8' }}>{r.city || '—'}</td>
+                      <td className="px-4 py-3">
+                        {r.alxStatus
+                          ? <span className="px-2 py-1 rounded-lg text-xs font-bold whitespace-nowrap"
+                              style={{ background: STATUS_STYLE[r.alxStatus]?.bg||'rgba(255,255,255,0.1)', color: STATUS_STYLE[r.alxStatus]?.color||'#94A3B8' }}>
+                              {r.alxStatus}
+                            </span>
+                          : <span style={{ color:'#475569' }}>—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {r.category
+                          ? <span className="px-2 py-1 rounded-lg text-xs font-bold" style={{ background:`${C.blue}20`, color:C.blue }}>{r.category}</span>
+                          : <span style={{ color:'#475569' }}>—</span>}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-white" style={{ maxWidth:180 }}>
+                        <span className="block truncate" title={r.title}>{r.title || '—'}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {r.link?.startsWith('http')
+                          ? <a href={r.link} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs whitespace-nowrap transition hover:opacity-80"
+                              style={{ color:C.blue }}>
+                              <ExternalLink size={11}/> View
+                            </a>
+                          : <span style={{ color:'#475569' }}>—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-1 rounded-lg text-xs font-bold whitespace-nowrap"
+                          style={{ background: SOURCE_STYLE[r._source]?.bg||'rgba(255,255,255,0.08)', color: SOURCE_STYLE[r._source]?.color||'#94A3B8' }}>
+                          {r._source}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filtered.length === 0 && (
+                <div className="text-center py-20 text-sm font-medium" style={{ color:'#475569' }}>
+                  {search ? `No results for "${search}"` : 'No submissions yet.'}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
