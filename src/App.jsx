@@ -10,7 +10,7 @@ import {
 
 // ─── Firebase ────────────────────────────────────────────────────────────────
 import { db, auth, storage } from './firebase';
-import { collection, addDoc, getDocs, query, orderBy, limit, doc, setDoc, updateDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, query, orderBy, limit, doc, setDoc, updateDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
@@ -554,6 +554,11 @@ export default function App() {
     setShowAuthModal(true);
   }, []);
 
+  const handleSignOut = useCallback(async () => {
+    await signOut(auth);
+    nav('home');
+  }, [nav]);
+
   const handleSubmit = useCallback(async (np) => {
     let projectId = String(Date.now());
     // Save to Firestore (primary store for new submissions)
@@ -624,7 +629,7 @@ export default function App() {
                       <Shield size={14}/> Admin
                     </button>
                   )}
-                  <button onClick={() => signOut(auth)} className="text-sm font-bold uppercase tracking-wide transition hover:opacity-70" style={{ color:`${C.dark}55` }}>
+                  <button onClick={handleSignOut} className="text-sm font-bold uppercase tracking-wide transition hover:opacity-70" style={{ color:`${C.dark}55` }}>
                     Sign Out
                   </button>
                 </>
@@ -652,7 +657,7 @@ export default function App() {
                     <Shield size={14}/> Admin
                   </button>
                 )}
-                <button onClick={() => signOut(auth)} className="block w-full text-left font-bold p-3 rounded-xl hover:bg-gray-50 transition text-sm uppercase tracking-wide" style={{ color:`${C.dark}55` }}>Sign Out</button>
+                <button onClick={handleSignOut} className="block w-full text-left font-bold p-3 rounded-xl hover:bg-gray-50 transition text-sm uppercase tracking-wide" style={{ color:`${C.dark}55` }}>Sign Out</button>
               </>
             ) : (
               <button onClick={() => openSignIn('signin')} className="block w-full text-left font-black p-3 rounded-xl hover:bg-gray-50 transition text-sm uppercase tracking-wide">Sign In</button>
@@ -667,7 +672,7 @@ export default function App() {
         {view === 'gallery' && <GalleryView nav={nav} projects={projects} authUser={authUser} onSignInRequest={openSignIn}/>}
         {view === 'submit'  && <SubmitView key={authUser?.uid || 'guest'} nav={nav} onSubmit={handleSubmit} authUser={authUser} onSignInRequest={openSignIn}/>}
         {view === 'project' && <ProjectView nav={nav} project={selected} authUser={authUser} onSignInRequest={openSignIn}/>}
-        {view === 'profile' && <ProfileView nav={nav} projects={projects} creator={selected}/>}
+        {view === 'profile' && <ProfileView nav={nav} projects={projects} creator={selected} authUser={authUser}/>}
         {view === 'admin'   && <AdminView nav={nav} authUser={authUser} isAdmin={isAdmin}/>}
       </main>
 
@@ -801,7 +806,7 @@ function HomeView({ nav, projects=[], authUser, onSignInRequest }) {
             <motion.div variants={SU} className="inline-flex items-center gap-3 mb-10">
               <div className="flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-[0.3em] shadow-md"
                 style={{ background:'white', color:C.purple, border:`1.5px solid ${C.purple}30` }}>
-                <Sparkles size={13} style={{ color:C.purple }}/> Festival 2026 — Now Open
+                <Sparkles size={13} style={{ color:C.purple }}/> Showcase Platform 2026
               </div>
             </motion.div>
 
@@ -811,10 +816,6 @@ function HomeView({ nav, projects=[], authUser, onSignInRequest }) {
               ALX SHOWCASE
             </motion.h1>
 
-            <motion.h2 variants={SU} className="font-black tracking-tighter leading-[0.88] mb-8 text-[2rem] sm:text-[3.2rem] md:text-[4.5rem]"
-              style={{ background:`linear-gradient(135deg,${C.purple} 0%,${C.blue} 45%,${C.blue} 100%)`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
-              <span className="italic" style={{ fontWeight:800 }}>FESTIVE</span>
-            </motion.h2>
 
             <motion.p variants={SU} className="text-base md:text-xl font-light max-w-xl mx-auto mb-10 leading-relaxed px-4"
               style={{ color:`${C.dark}80` }}>
@@ -1078,7 +1079,6 @@ function GalleryView({ nav, projects=[], authUser, onSignInRequest }) {
 // SUBMIT VIEW
 // ══════════════════════════════════════════════════════════════════════════════
 function SubmitView({ nav, onSubmit, authUser, onSignInRequest }) {
-  const [step, setStep] = useState(1);
   const [fd, setFd] = useState(() => ({
     title:'', creator: authUser?.displayName || '', email: authUser?.email || '',
     program:'Content Creation', city:'', category:'Visual', description:'',
@@ -1086,6 +1086,26 @@ function SubmitView({ nav, onSubmit, authUser, onSignInRequest }) {
   }));
   const [uploadProgress, setUploadProgress] = useState(null); // null | 0–100 | 'done' | 'error'
   const [uploadedFileName, setUploadedFileName] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
+
+  // Pre-fill saved profile data from Firestore when signed in
+  useEffect(() => {
+    if (!authUser) return;
+    getDoc(doc(db, 'users', authUser.uid)).then(snap => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+      setFd(prev => ({
+        ...prev,
+        creator:   authUser.displayName || d.name  || prev.creator,
+        program:   d.program   || prev.program,
+        city:      d.city      || prev.city,
+        alxStatus: d.alxStatus || prev.alxStatus,
+        linkedin:  d.linkedin  || prev.linkedin,
+        instagram: d.instagram || prev.instagram,
+        tiktok:    d.tiktok    || prev.tiktok,
+      }));
+    }).catch(() => {});
+  }, [authUser]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -1146,9 +1166,10 @@ function SubmitView({ nav, onSubmit, authUser, onSignInRequest }) {
     }
     let postLink = fd.link.trim();
     if (postLink && !postLink.startsWith('http')) postLink = 'https://' + postLink;
-    const image = fd.image || (postLink ? FALLBACK_IMG : FALLBACK_IMG);
+    const image = fd.image || FALLBACK_IMG;
     onSubmit({ ...fd, link:postLink, image, linkedin:linkedinUrl, tiktok:fd.tiktok.trim(), instagram:fd.instagram.trim(), id:Date.now(), likes:0, tags:[], comments:[] });
   };
+
   const inp = "w-full bg-white border rounded-2xl px-5 py-4 focus:outline-none text-base font-medium shadow-sm transition";
   const inpStyle = { borderColor:'rgba(0,0,0,0.1)', color:C.dark };
   const detectedPlatform = detectPlatform(fd.link);
@@ -1163,173 +1184,219 @@ function SubmitView({ nav, onSubmit, authUser, onSignInRequest }) {
         </button>
 
         <div className="rounded-3xl shadow-xl overflow-hidden" style={{ background:'white', border:'1px solid rgba(0,0,0,0.06)' }}>
-          <div className="h-1.5">
-            <motion.div className="h-full" animate={{ width:step === 1 ? '50%' : '100%' }} transition={{ duration:0.4 }} style={{ background:`linear-gradient(90deg,${C.purple},${C.blue})` }}/>
-          </div>
-          <div className="relative">
-            <div className="p-10 sm:p-12 relative z-10">
-              <p className="text-xs font-black uppercase tracking-[0.3em] mb-2" style={{ color:C.purple }}>Step {step} of 2</p>
-              <h1 className="text-4xl font-black mb-2 tracking-tight" style={{ color:C.dark }}>Submit Your Work</h1>
-              <p className="mb-10 text-lg font-light" style={{ color:`${C.dark}55` }}>Share your creativity with the ALX community.</p>
+          <div className="h-1.5" style={{ background:`linear-gradient(90deg,${C.purple},${C.blue})` }}/>
 
-              <form onSubmit={handleSubmit}>
-                {step === 1 ? (
-                  <motion.div initial={{ opacity:0, x:-20 }} animate={{ opacity:1, x:0 }} transition={{ duration:0.3 }} className="space-y-7">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Full Name</label>
-                        <input required className={inp} style={inpStyle} placeholder="e.g. Jane Doe" value={fd.creator} onChange={e => setFd({...fd, creator:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Email</label>
-                        <input required type="email" className={inp} style={inpStyle} placeholder="jane@example.com" value={fd.email} onChange={e => setFd({...fd, email:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
-                      </div>
+          <div className="p-10 sm:p-12">
+            {/* Header row */}
+            <div className="flex items-start justify-between gap-4 mb-2">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.3em] mb-1" style={{ color:C.purple }}>Quick Upload</p>
+                <h1 className="text-4xl font-black tracking-tight" style={{ color:C.dark }}>Add New Work</h1>
+              </div>
+              {/* Profile avatar pill — links to their profile */}
+              <button
+                onClick={() => nav('profile', { name: authUser.displayName || authUser.email, email: authUser.email, userId: authUser.uid })}
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-2xl transition hover:opacity-80 shrink-0 mt-1"
+                style={{ background:`${C.purple}08`, border:`1px solid ${C.purple}15` }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black text-white shrink-0"
+                  style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
+                  {(authUser.displayName || authUser.email)?.charAt(0)?.toUpperCase()}
+                </div>
+                <div className="text-left hidden sm:block">
+                  <p className="text-xs font-black leading-tight truncate max-w-[120px]" style={{ color:C.dark }}>
+                    {authUser.displayName || authUser.email}
+                  </p>
+                  <p className="text-[10px] font-medium mt-0.5" style={{ color:`${C.dark}45` }}>My Profile</p>
+                </div>
+              </button>
+            </div>
+            <p className="mb-10 text-base font-light" style={{ color:`${C.dark}55` }}>Share your latest creative work with the community.</p>
+
+            <form onSubmit={handleSubmit} className="space-y-7">
+              {/* Title */}
+              <div>
+                <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Project Title</label>
+                <input required className={inp} style={inpStyle} placeholder="Give your work a catchy title"
+                  value={fd.title} onChange={e => setFd({...fd, title:e.target.value})}
+                  onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Category</label>
+                <div className="flex flex-wrap gap-3">
+                  {['Visual','Video','Audio','Writing'].map(type => (
+                    <button key={type} type="button" onClick={() => setFd({...fd, category:type})}
+                      className="px-6 py-3 rounded-full text-sm font-black transition-all"
+                      style={fd.category === type
+                        ? { background:`linear-gradient(135deg,${C.purple},${C.blue})`, color:'white', boxShadow:`0 8px 24px ${C.purple}30` }
+                        : { background:'white', color:C.dark, border:'1.5px solid rgba(0,0,0,0.12)' }}>
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Media upload */}
+              <div>
+                <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Media / File Upload</label>
+                <div className="border-2 border-dashed rounded-2xl p-8 text-center transition group"
+                  style={{ borderColor: uploadProgress === 'done' ? C.green : 'rgba(0,0,0,0.12)', background:'rgba(95,61,196,0.02)' }}
+                  onMouseEnter={e => { if (uploadProgress !== 'done') e.currentTarget.style.borderColor = C.purple; }}
+                  onMouseLeave={e => { if (uploadProgress !== 'done') e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'; }}>
+                  <input type="file" id="fu" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.ppt,.pptx" onChange={handleFileChange}/>
+                  <label htmlFor="fu" className="cursor-pointer block">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition"
+                      style={{ background: uploadProgress === 'done' ? `${C.green}15` : `${C.purple}12` }}>
+                      {uploadProgress === 'done'
+                        ? <CheckCircle size={28} style={{ color:C.green }}/>
+                        : uploadProgress === 'error'
+                        ? <X size={28} style={{ color:'#EF4444' }}/>
+                        : <Upload size={28} style={{ color:C.purple }}/>}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {uploadProgress === null && (
+                      <>
+                        <p className="text-base font-bold" style={{ color:C.dark }}>Click to browse files</p>
+                        <p className="text-xs mt-1" style={{ color:`${C.dark}40` }}>Images · Video · Audio · PDF · Word · PowerPoint</p>
+                      </>
+                    )}
+                    {typeof uploadProgress === 'number' && (
+                      <div className="mt-2">
+                        <p className="text-sm font-bold mb-2 truncate" style={{ color:C.dark }}>{uploadedFileName}</p>
+                        <div className="w-full h-2 rounded-full overflow-hidden" style={{ background:'rgba(0,0,0,0.08)' }}>
+                          <div className="h-full rounded-full transition-all duration-300" style={{ width:`${uploadProgress}%`, background:`linear-gradient(90deg,${C.purple},${C.blue})` }}/>
+                        </div>
+                        <p className="text-xs mt-1.5 font-bold" style={{ color:C.purple }}>{uploadProgress}% uploaded…</p>
+                      </div>
+                    )}
+                    {uploadProgress === 'done' && (
+                      <div className="mt-1">
+                        <p className="text-sm font-bold" style={{ color:C.green }}>Upload complete!</p>
+                        <p className="text-xs mt-0.5 truncate" style={{ color:`${C.dark}50` }}>{uploadedFileName}</p>
+                        <p className="text-xs mt-1 underline" style={{ color:C.purple }}>Click to replace file</p>
+                      </div>
+                    )}
+                    {uploadProgress === 'error' && (
+                      <div className="mt-1">
+                        <p className="text-sm font-bold" style={{ color:'#EF4444' }}>Upload failed</p>
+                        <p className="text-xs mt-0.5" style={{ color:`${C.dark}50` }}>Check your connection and try again</p>
+                        <p className="text-xs mt-1 underline" style={{ color:C.purple }}>Click to retry</p>
+                      </div>
+                    )}
+                  </label>
+                </div>
+                <div className="relative my-5">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor:'rgba(0,0,0,0.08)' }}/></div>
+                  <div className="relative flex justify-center"><span className="px-4 text-xs uppercase font-black tracking-widest bg-white rounded-full" style={{ color:`${C.dark}40` }}>Or paste a link instead</span></div>
+                </div>
+                <input type="text" placeholder="LinkedIn, Instagram, TikTok, YouTube, SoundCloud, Google Drive…"
+                  className="w-full border rounded-xl p-3.5 text-sm focus:outline-none bg-white shadow-sm"
+                  style={{ borderColor:'rgba(0,0,0,0.1)', color:C.dark }}
+                  value={uploadProgress === 'done' ? '' : fd.link} onChange={e => setFd({...fd, link:e.target.value})}
+                  onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                {detectedPlatform && uploadProgress !== 'done' && (
+                  <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl" style={{ background:`${C.green}10`, border:`1px solid ${C.green}25` }}>
+                    <CheckCircle size={14} style={{ color:C.green }}/>
+                    <span className="text-xs font-bold" style={{ color:C.green }}>Detected: {detectedPlatform}</span>
+                    <span className="text-xs" style={{ color:`${C.dark}40` }}>— will display as embedded content or link card</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>
+                  Description <span className="font-medium normal-case tracking-normal" style={{ color:`${C.dark}40` }}>(optional)</span>
+                </label>
+                <textarea className={`${inp} h-32 resize-none`} style={inpStyle}
+                  placeholder="Tell us the inspiration behind this project…"
+                  value={fd.description} onChange={e => setFd({...fd, description:e.target.value})}
+                  onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+              </div>
+
+              {/* Collapsible profile details */}
+              <div className="rounded-2xl overflow-hidden" style={{ border:'1.5px solid rgba(0,0,0,0.08)' }}>
+                <button type="button" onClick={() => setShowDetails(v => !v)}
+                  className="w-full flex items-center justify-between px-5 py-4 transition hover:bg-gray-50">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-sm font-black uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Profile Details</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wide"
+                      style={{ background:`${C.blue}12`, color:C.blue }}>Optional</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {(fd.program || fd.city) && (
+                      <span className="text-xs font-medium hidden sm:block truncate max-w-[160px]" style={{ color:`${C.dark}40` }}>
+                        {[fd.program, fd.city].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                    {showDetails ? <ChevronUp size={16} style={{ color:`${C.dark}40` }}/> : <ChevronDown size={16} style={{ color:`${C.dark}40` }}/>}
+                  </div>
+                </button>
+                {showDetails && (
+                  <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ duration:0.2 }}
+                    className="px-5 pb-6 space-y-5 border-t" style={{ borderColor:'rgba(0,0,0,0.06)' }}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-5">
                       <div>
                         <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Program</label>
-                        <select className={inp} style={inpStyle} value={fd.program} onChange={e => setFd({...fd, program:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
-                          {[
-                            'Front End','Back End','Front-End ProDev','Back-End ProDev',
-                            'Data Analytics','Data Science','Data Engineering',
-                            'AWS Cloud Practitioner','AWS Solutions Architect',
-                            'SalesForce Associate','SalesForce Administrator',
-                            'Cybersecurity',
-                            'AI for Creatives','Graphic Design','Content Creation','Audio Production',
-                          ].map(p => <option key={p}>{p}</option>)}
+                        <select className={inp} style={inpStyle} value={fd.program} onChange={e => setFd({...fd, program:e.target.value})}
+                          onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
+                          {['Front End','Back End','Front-End ProDev','Back-End ProDev','Data Analytics','Data Science','Data Engineering','AWS Cloud Practitioner','AWS Solutions Architect','SalesForce Associate','SalesForce Administrator','Cybersecurity','AI for Creatives','Graphic Design','Content Creation','Audio Production'].map(p => <option key={p}>{p}</option>)}
                         </select>
                       </div>
                       <div>
                         <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>ALX Status</label>
-                        <select className={inp} style={inpStyle} value={fd.alxStatus} onChange={e => setFd({...fd, alxStatus:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
+                        <select className={inp} style={inpStyle} value={fd.alxStatus} onChange={e => setFd({...fd, alxStatus:e.target.value})}
+                          onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
                           {['Current Learner','Alumni','Applicant'].map(s => <option key={s}>{s}</option>)}
                         </select>
                       </div>
                     </div>
                     <div>
                       <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>City & Country</label>
-                      <input required className={inp} style={inpStyle} placeholder="e.g. Nairobi, Kenya" value={fd.city} onChange={e => setFd({...fd, city:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
-                    </div>
-                    <motion.button whileTap={{ scale:0.97 }}
-                      type="button" onClick={() => { if (fd.creator && fd.city && fd.email) setStep(2); }}
-                      className="w-full py-4 rounded-2xl font-black text-white text-lg flex items-center justify-center gap-2 shadow-lg"
-                      style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
-                      Next Step <ChevronRight size={20}/>
-                    </motion.button>
-                  </motion.div>
-                ) : (
-                  <motion.div initial={{ opacity:0, x:20 }} animate={{ opacity:1, x:0 }} transition={{ duration:0.3 }} className="space-y-7">
-                    <div>
-                      <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Project Title</label>
-                      <input required className={inp} style={inpStyle} placeholder="Give your work a catchy title" value={fd.title} onChange={e => setFd({...fd, title:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Category</label>
-                      <div className="flex flex-wrap gap-3">
-                        {['Visual','Video','Audio','Writing'].map(type => (
-                          <button key={type} type="button" onClick={() => setFd({...fd, category:type})}
-                            className="px-6 py-3 rounded-full text-sm font-black transition-all"
-                            style={fd.category === type ? { background:`linear-gradient(135deg,${C.purple},${C.blue})`, color:'white', boxShadow:`0 8px 24px ${C.purple}30` } : { background:'white', color:C.dark, border:'1.5px solid rgba(0,0,0,0.12)' }}>
-                            {type}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Media / File Upload</label>
-                      <div className="border-2 border-dashed rounded-2xl p-8 text-center transition group" style={{ borderColor: uploadProgress === 'done' ? C.green : 'rgba(0,0,0,0.12)', background:'rgba(95,61,196,0.02)' }}
-                        onMouseEnter={e => { if (uploadProgress !== 'done') e.currentTarget.style.borderColor = C.purple; }} onMouseLeave={e => { if (uploadProgress !== 'done') e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)'; }}>
-                        <input type="file" id="fu" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.ppt,.pptx" onChange={handleFileChange}/>
-                        <label htmlFor="fu" className="cursor-pointer block">
-                          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition" style={{ background: uploadProgress === 'done' ? `${C.green}15` : `${C.purple}12` }}>
-                            {uploadProgress === 'done'
-                              ? <CheckCircle size={28} style={{ color:C.green }}/>
-                              : uploadProgress === 'error'
-                              ? <X size={28} style={{ color:'#EF4444' }}/>
-                              : <Upload size={28} style={{ color:C.purple }}/>}
-                          </div>
-                          {uploadProgress === null && (
-                            <>
-                              <p className="text-base font-bold" style={{ color:C.dark }}>Click to browse files</p>
-                              <p className="text-xs mt-1" style={{ color:`${C.dark}40` }}>Images · Video · Audio · PDF · Word · PowerPoint</p>
-                            </>
-                          )}
-                          {typeof uploadProgress === 'number' && (
-                            <div className="mt-2">
-                              <p className="text-sm font-bold mb-2 truncate" style={{ color:C.dark }}>{uploadedFileName}</p>
-                              <div className="w-full h-2 rounded-full overflow-hidden" style={{ background:'rgba(0,0,0,0.08)' }}>
-                                <div className="h-full rounded-full transition-all duration-300" style={{ width:`${uploadProgress}%`, background:`linear-gradient(90deg,${C.purple},${C.blue})` }}/>
-                              </div>
-                              <p className="text-xs mt-1.5 font-bold" style={{ color:C.purple }}>{uploadProgress}% uploaded…</p>
-                            </div>
-                          )}
-                          {uploadProgress === 'done' && (
-                            <div className="mt-1">
-                              <p className="text-sm font-bold" style={{ color:C.green }}>Upload complete!</p>
-                              <p className="text-xs mt-0.5 truncate" style={{ color:`${C.dark}50` }}>{uploadedFileName}</p>
-                              <p className="text-xs mt-1 underline" style={{ color:C.purple }}>Click to replace file</p>
-                            </div>
-                          )}
-                          {uploadProgress === 'error' && (
-                            <div className="mt-1">
-                              <p className="text-sm font-bold" style={{ color:'#EF4444' }}>Upload failed</p>
-                              <p className="text-xs mt-0.5" style={{ color:`${C.dark}50` }}>Check your connection and try again</p>
-                              <p className="text-xs mt-1 underline" style={{ color:C.purple }}>Click to retry</p>
-                            </div>
-                          )}
-                        </label>
-                      </div>
-                      <div className="relative my-5"><div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor:'rgba(0,0,0,0.08)' }}/></div><div className="relative flex justify-center"><span className="px-4 text-xs uppercase font-black tracking-widest bg-white rounded-full" style={{ color:`${C.dark}40` }}>Or paste a link instead</span></div></div>
-                      <input type="text" placeholder="LinkedIn, Instagram, TikTok, YouTube, SoundCloud, Google Drive…"
-                        className="w-full border rounded-xl p-3.5 text-sm focus:outline-none bg-white shadow-sm"
-                        style={{ borderColor:'rgba(0,0,0,0.1)', color:C.dark }}
-                        value={uploadProgress === 'done' ? '' : fd.link} onChange={e => setFd({...fd, link:e.target.value})}
+                      <input className={inp} style={inpStyle} placeholder="e.g. Nairobi, Kenya"
+                        value={fd.city} onChange={e => setFd({...fd, city:e.target.value})}
                         onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
-                      {detectedPlatform && uploadProgress !== 'done' && (
-                        <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl" style={{ background:`${C.green}10`, border:`1px solid ${C.green}25` }}>
-                          <CheckCircle size={14} style={{ color:C.green }}/>
-                          <span className="text-xs font-bold" style={{ color:C.green }}>Detected: {detectedPlatform}</span>
-                          <span className="text-xs" style={{ color:`${C.dark}40` }}>— will display as embedded content or link card</span>
-                        </div>
-                      )}
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Description</label>
-                      <textarea className={`${inp} h-36 resize-none`} style={inpStyle} placeholder="Tell us the inspiration behind this project…" value={fd.description} onChange={e => setFd({...fd, description:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Social Profiles <span className="font-medium normal-case tracking-normal" style={{ color:`${C.dark}40` }}>(optional)</span></label>
+                      <label className="block text-xs font-black mb-2.5 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>
+                        Social Profiles <span className="font-medium normal-case tracking-normal" style={{ color:`${C.dark}40` }}>(optional)</span>
+                      </label>
                       <div className="space-y-3">
                         <div className="relative">
                           <Linkedin size={17} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:`${C.blue}70` }}/>
-                          <input className={`${inp} pl-11`} style={inpStyle} placeholder="linkedin.com/in/your-name" value={fd.linkedin} onChange={e => setFd({...fd, linkedin:e.target.value})} onFocus={e => e.target.style.borderColor = C.blue} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                          <input className={`${inp} pl-11`} style={inpStyle} placeholder="linkedin.com/in/your-name"
+                            value={fd.linkedin} onChange={e => setFd({...fd, linkedin:e.target.value})}
+                            onFocus={e => e.target.style.borderColor = C.blue} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                         </div>
                         <div className="relative">
                           <Instagram size={17} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:`${C.purple}70` }}/>
-                          <input className={`${inp} pl-11`} style={inpStyle} placeholder="instagram.com/your-handle" value={fd.instagram} onChange={e => setFd({...fd, instagram:e.target.value})} onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                          <input className={`${inp} pl-11`} style={inpStyle} placeholder="instagram.com/your-handle"
+                            value={fd.instagram} onChange={e => setFd({...fd, instagram:e.target.value})}
+                            onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                         </div>
                         <div className="relative">
                           <Play size={17} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:`${C.dark}50` }}/>
-                          <input className={`${inp} pl-11`} style={inpStyle} placeholder="tiktok.com/@your-handle" value={fd.tiktok} onChange={e => setFd({...fd, tiktok:e.target.value})} onFocus={e => e.target.style.borderColor = C.dark} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                          <input className={`${inp} pl-11`} style={inpStyle} placeholder="tiktok.com/@your-handle"
+                            value={fd.tiktok} onChange={e => setFd({...fd, tiktok:e.target.value})}
+                            onFocus={e => e.target.style.borderColor = C.dark} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
                         </div>
                       </div>
                       <p className="text-xs mt-1.5 font-medium" style={{ color:`${C.dark}35` }}>Help recruiters and collaborators find you</p>
                     </div>
-                    <div className="flex gap-4 pt-2">
-                      <motion.button whileTap={{ scale:0.97 }} type="button" onClick={() => setStep(1)}
-                        className="flex-1 py-4 rounded-2xl font-black text-base transition"
-                        style={{ background:'white', color:C.dark, border:'1.5px solid rgba(0,0,0,0.1)' }}>Back</motion.button>
-                      <motion.button whileTap={{ scale:0.97 }} type="submit"
-                        disabled={typeof uploadProgress === 'number'}
-                        className="flex-[2] py-4 rounded-2xl font-black text-white text-base shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
-                        {typeof uploadProgress === 'number' ? `Uploading ${uploadProgress}%…` : 'Submit Project ✦'}
-                      </motion.button>
-                    </div>
                   </motion.div>
                 )}
-              </form>
-            </div>
+              </div>
+
+              {/* Submit */}
+              <motion.button whileTap={{ scale:0.97 }} type="submit"
+                disabled={typeof uploadProgress === 'number'}
+                className="w-full py-5 rounded-2xl font-black text-white text-lg flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
+                {typeof uploadProgress === 'number'
+                  ? `Uploading ${uploadProgress}%…`
+                  : <><Upload size={20}/> Upload Work ✦</>}
+              </motion.button>
+            </form>
           </div>
         </div>
       </div>
@@ -1677,10 +1744,169 @@ function AuthModal({ mode: initialMode, onClose, onSuccess }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// EDIT PROFILE MODAL
+// ══════════════════════════════════════════════════════════════════════════════
+function EditProfileModal({ authUser, initialData, onClose, onSaved }) {
+  const [fd, setFd] = useState({
+    name:      authUser.displayName || initialData.name || '',
+    bio:       initialData.bio       || '',
+    city:      initialData.city      || '',
+    program:   initialData.program   || 'Content Creation',
+    alxStatus: initialData.alxStatus || 'Current Learner',
+    linkedin:  initialData.linkedin  || '',
+    instagram: initialData.instagram || '',
+    tiktok:    initialData.tiktok    || '',
+  });
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const inp = "w-full bg-white border rounded-2xl px-5 py-4 focus:outline-none text-base font-medium shadow-sm transition";
+  const inpStyle = { borderColor:'rgba(0,0,0,0.1)', color:C.dark };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const updates = {
+        name:      fd.name,
+        email:     authUser.email,
+        bio:       fd.bio,
+        city:      fd.city,
+        program:   fd.program,
+        alxStatus: fd.alxStatus,
+        linkedin:  fd.linkedin,
+        instagram: fd.instagram,
+        tiktok:    fd.tiktok,
+        updatedAt: Date.now(),
+      };
+      await setDoc(doc(db, 'users', authUser.uid), updates, { merge: true });
+      if (fd.name && fd.name !== authUser.displayName) {
+        await updateProfile(authUser, { displayName: fd.name });
+      }
+      setSuccess(true);
+      setTimeout(() => { onSaved(updates); onClose(); }, 800);
+    } catch {
+      setError('Could not save changes. Please try again.');
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 overflow-y-auto"
+      style={{ background:'rgba(0,0,0,0.6)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <motion.div initial={{ opacity:0, scale:0.96 }} animate={{ opacity:1, scale:1 }} transition={{ duration:0.2 }}
+        className="w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden relative my-8" style={{ background:'white' }}>
+        <div className="h-1.5" style={{ background:`linear-gradient(90deg,${C.purple},${C.blue})` }}/>
+        <button onClick={onClose} className="absolute top-5 right-5 p-2 rounded-full hover:bg-gray-100 transition z-10">
+          <X size={20} style={{ color:`${C.dark}60` }}/>
+        </button>
+        <div className="p-10">
+          <h2 className="text-3xl font-black mb-1 tracking-tight" style={{ color:C.dark }}>Edit Profile</h2>
+          <p className="mb-8 font-light" style={{ color:`${C.dark}55` }}>Update your creator profile information.</p>
+
+          <form onSubmit={handleSave} className="space-y-5">
+            <div>
+              <label className="block text-xs font-black mb-2 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Display Name</label>
+              <input required value={fd.name} onChange={e => setFd({...fd, name:e.target.value})} placeholder="Jane Doe"
+                className={inp} style={inpStyle}
+                onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black mb-2 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>
+                Bio <span className="font-medium normal-case tracking-normal" style={{ color:`${C.dark}40` }}>(optional)</span>
+              </label>
+              <textarea value={fd.bio} onChange={e => setFd({...fd, bio:e.target.value})}
+                placeholder="Tell us about yourself and your creative work…"
+                className={`${inp} h-24 resize-none`} style={inpStyle}
+                onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-black mb-2 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Program</label>
+                <select className={inp} style={inpStyle} value={fd.program} onChange={e => setFd({...fd, program:e.target.value})}
+                  onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
+                  {['Front End','Back End','Front-End ProDev','Back-End ProDev','Data Analytics','Data Science','Data Engineering','AWS Cloud Practitioner','AWS Solutions Architect','SalesForce Associate','SalesForce Administrator','Cybersecurity','AI for Creatives','Graphic Design','Content Creation','Audio Production'].map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-black mb-2 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>ALX Status</label>
+                <select className={inp} style={inpStyle} value={fd.alxStatus} onChange={e => setFd({...fd, alxStatus:e.target.value})}
+                  onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}>
+                  {['Current Learner','Alumni','Applicant'].map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black mb-2 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>City & Country</label>
+              <input value={fd.city} onChange={e => setFd({...fd, city:e.target.value})} placeholder="e.g. Nairobi, Kenya"
+                className={inp} style={inpStyle}
+                onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black mb-2 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Social Profiles</label>
+              <div className="space-y-3">
+                <div className="relative">
+                  <Linkedin size={17} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:`${C.blue}70` }}/>
+                  <input className={`${inp} pl-11`} style={inpStyle} placeholder="linkedin.com/in/your-name"
+                    value={fd.linkedin} onChange={e => setFd({...fd, linkedin:e.target.value})}
+                    onFocus={e => e.target.style.borderColor = C.blue} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                </div>
+                <div className="relative">
+                  <Instagram size={17} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:`${C.purple}70` }}/>
+                  <input className={`${inp} pl-11`} style={inpStyle} placeholder="instagram.com/your-handle"
+                    value={fd.instagram} onChange={e => setFd({...fd, instagram:e.target.value})}
+                    onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                </div>
+                <div className="relative">
+                  <Play size={17} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:`${C.dark}50` }}/>
+                  <input className={`${inp} pl-11`} style={inpStyle} placeholder="tiktok.com/@your-handle"
+                    value={fd.tiktok} onChange={e => setFd({...fd, tiktok:e.target.value})}
+                    onFocus={e => e.target.style.borderColor = C.dark} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <p className="text-sm font-medium px-4 py-3 rounded-xl" style={{ background:`${C.yellow}25`, color:'#92400e' }}>{error}</p>
+            )}
+            {success && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-xl" style={{ background:`${C.green}15`, border:`1px solid ${C.green}30` }}>
+                <CheckCircle size={16} style={{ color:C.green }}/>
+                <p className="text-sm font-bold" style={{ color:C.green }}>Profile saved!</p>
+              </div>
+            )}
+
+            <div className="flex gap-4 pt-2">
+              <button type="button" onClick={onClose}
+                className="flex-1 py-4 rounded-2xl font-black text-base transition"
+                style={{ background:'white', color:C.dark, border:'1.5px solid rgba(0,0,0,0.1)' }}>Cancel</button>
+              <button type="submit" disabled={saving}
+                className="flex-[2] py-4 rounded-2xl font-black text-white text-base shadow-xl transition hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2"
+                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
+                {saving ? <Loader size={18} className="animate-spin"/> : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // PROFILE VIEW — public creator profile with all their work
 // ══════════════════════════════════════════════════════════════════════════════
-function ProfileView({ nav, projects, creator }) {
-  // Hooks must run unconditionally — guard inside the callbacks instead
+function ProfileView({ nav, projects, creator, authUser }) {
+  const [editOpen, setEditOpen]         = useState(false);
+  const [savedOverrides, setSavedOverrides] = useState({});
+
   const creatorProjects = useMemo(() => {
     if (!creator) return [];
     return (projects || []).filter(p =>
@@ -1690,25 +1916,50 @@ function ProfileView({ nav, projects, creator }) {
     );
   }, [projects, creator]);
 
-  // Redirect in an effect, not during render
+  // Fetch latest profile data from Firestore (picks up bio + any edits)
+  useEffect(() => {
+    if (!creator?.userId) return;
+    getDoc(doc(db, 'users', creator.userId)).then(snap => {
+      if (snap.exists()) setSavedOverrides(snap.data());
+    }).catch(() => {});
+  }, [creator?.userId]);
+
   useEffect(() => {
     if (!creator) nav('gallery');
   }, [creator, nav]);
 
   if (!creator) return null;
 
-  // Fill missing profile fields from the most recent project
-  const ref = creatorProjects[0] || {};
-  const program    = creator.program    || ref.program    || '';
-  const city       = creator.city       || ref.city       || '';
-  const linkedin   = creator.linkedin   || ref.linkedin   || '';
-  const instagram  = creator.instagram  || ref.instagram  || '';
-  const tiktok     = creator.tiktok     || ref.tiktok     || '';
-  const alxStatus  = creator.alxStatus  || ref.alxStatus  || '';
+  // Is the signed-in user viewing their own profile?
+  const isOwnProfile = authUser && (
+    authUser.uid === creator.userId ||
+    authUser.email === creator.email
+  );
+
+  // Merge: base creator object → Firestore data → post-edit local overrides
+  const merged = { ...creator, ...savedOverrides };
+  const ref        = creatorProjects[0] || {};
+  const displayName = merged.name      || creator.name || '';
+  const program    = merged.program    || ref.program    || '';
+  const city       = merged.city       || ref.city       || '';
+  const linkedin   = merged.linkedin   || ref.linkedin   || '';
+  const instagram  = merged.instagram  || ref.instagram  || '';
+  const tiktok     = merged.tiktok     || ref.tiktok     || '';
+  const alxStatus  = merged.alxStatus  || ref.alxStatus  || '';
+  const bio        = merged.bio        || '';
   const totalLikes = creatorProjects.reduce((sum, p) => sum + (p.likes || 0), 0);
 
   return (
     <div className="min-h-screen" style={{ background:C.offwhite }}>
+      {editOpen && isOwnProfile && (
+        <EditProfileModal
+          authUser={authUser}
+          initialData={{ name: displayName, bio, city, program, alxStatus, linkedin, instagram, tiktok }}
+          onClose={() => setEditOpen(false)}
+          onSaved={updates => setSavedOverrides(prev => ({ ...prev, ...updates }))}
+        />
+      )}
+
       <KenteDivider/>
 
       {/* ── Profile hero ─────────────────────────────────────────────────── */}
@@ -1718,22 +1969,39 @@ function ProfileView({ nav, projects, creator }) {
         <PaintSplash color={C.green}  size={180} style={{ top:'40%', right:'12%', transform:'rotate(-45deg)' }} className="opacity-15"/>
 
         <div className="max-w-5xl mx-auto px-6 py-24 relative z-10">
-          <button onClick={() => nav('gallery')} className="mb-12 inline-flex items-center gap-2 font-bold text-sm px-5 py-2.5 rounded-full transition hover:opacity-80"
-            style={{ color:'rgba(255,255,255,0.7)', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)' }}>
-            <ArrowLeft size={15}/> Back to Gallery
-          </button>
+          {/* Top bar: back button + own-profile actions */}
+          <div className="flex items-center justify-between mb-12 flex-wrap gap-3">
+            <button onClick={() => nav('gallery')} className="inline-flex items-center gap-2 font-bold text-sm px-5 py-2.5 rounded-full transition hover:opacity-80"
+              style={{ color:'rgba(255,255,255,0.7)', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)' }}>
+              <ArrowLeft size={15}/> Back to Gallery
+            </button>
+            {isOwnProfile && (
+              <div className="flex items-center gap-3">
+                <button onClick={() => nav('submit')}
+                  className="inline-flex items-center gap-2 font-black text-sm px-5 py-2.5 rounded-full transition hover:opacity-80"
+                  style={{ background:`${C.green}25`, color:C.green, border:`1px solid ${C.green}40` }}>
+                  <Upload size={14}/> Add Work
+                </button>
+                <button onClick={() => setEditOpen(true)}
+                  className="inline-flex items-center gap-2 font-black text-sm px-5 py-2.5 rounded-full transition hover:opacity-80"
+                  style={{ background:'rgba(255,255,255,0.12)', color:'white', border:'1px solid rgba(255,255,255,0.2)' }}>
+                  Edit Profile
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
             {/* Avatar */}
             <div className="w-32 h-32 rounded-full flex items-center justify-center text-5xl font-black text-white shadow-2xl flex-shrink-0"
               style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})`, border:'4px solid rgba(255,255,255,0.15)' }}>
-              {creator.name?.charAt(0)?.toUpperCase() || '?'}
+              {displayName?.charAt(0)?.toUpperCase() || '?'}
             </div>
 
             {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-2 flex-wrap">
-                <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white">{creator.name}</h1>
+                <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white">{displayName}</h1>
                 {alxStatus && (
                   <span className="text-xs font-black px-3 py-1.5 rounded-full uppercase tracking-widest"
                     style={{ background:`${C.green}25`, color:C.green, border:`1px solid ${C.green}35` }}>
@@ -1743,9 +2011,12 @@ function ProfileView({ nav, projects, creator }) {
               </div>
               {program && <p className="font-black text-lg mb-1" style={{ color:C.purple }}>{program}</p>}
               {city && (
-                <p className="flex items-center gap-1.5 text-sm font-medium mb-5" style={{ color:'rgba(255,255,255,0.45)' }}>
+                <p className="flex items-center gap-1.5 text-sm font-medium mb-3" style={{ color:'rgba(255,255,255,0.45)' }}>
                   <MapPin size={13}/>{city}
                 </p>
+              )}
+              {bio && (
+                <p className="text-sm leading-relaxed mb-5 max-w-lg" style={{ color:'rgba(255,255,255,0.6)' }}>{bio}</p>
               )}
               {/* Social links */}
               <div className="flex flex-wrap gap-3">
@@ -1798,17 +2069,33 @@ function ProfileView({ nav, projects, creator }) {
       {/* ── Projects grid ────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-16">
         <RevealSection>
-          <motion.h2 variants={SU} className="text-3xl font-black tracking-tight mb-12" style={{ color:C.dark }}>
-            {creator.name?.split(' ')[0]}'s Work
-            <span className="ml-3 text-lg font-bold" style={{ color:`${C.dark}35` }}>({creatorProjects.length})</span>
-          </motion.h2>
+          <div className="flex items-center justify-between mb-12 flex-wrap gap-4">
+            <motion.h2 variants={SU} className="text-3xl font-black tracking-tight" style={{ color:C.dark }}>
+              {displayName?.split(' ')[0]}'s Work
+              <span className="ml-3 text-lg font-bold" style={{ color:`${C.dark}35` }}>({creatorProjects.length})</span>
+            </motion.h2>
+            {isOwnProfile && (
+              <motion.button variants={SU} onClick={() => nav('submit')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-black text-sm text-white shadow-md transition hover:opacity-90"
+                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
+                <Upload size={14}/> Add New Work
+              </motion.button>
+            )}
+          </div>
         </RevealSection>
 
         {creatorProjects.length === 0 ? (
           <div className="text-center py-24">
-            <p className="text-xl font-light mb-6" style={{ color:`${C.dark}40` }}>No submissions found for this creator yet.</p>
-            <button onClick={() => nav('gallery')} className="px-8 py-4 rounded-full font-black text-white shadow-lg"
-              style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>Browse the Gallery</button>
+            <p className="text-xl font-light mb-6" style={{ color:`${C.dark}40` }}>No submissions found yet.</p>
+            {isOwnProfile ? (
+              <button onClick={() => nav('submit')} className="px-8 py-4 rounded-full font-black text-white shadow-lg"
+                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
+                Upload Your First Work
+              </button>
+            ) : (
+              <button onClick={() => nav('gallery')} className="px-8 py-4 rounded-full font-black text-white shadow-lg"
+                style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>Browse the Gallery</button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -1861,9 +2148,12 @@ const ADMIN_COLS = [
   { key: 'alxStatus', label: 'Status' },
   { key: 'category',  label: 'Category' },
   { key: 'title',     label: 'Title' },
+  { key: 'likes',     label: 'Likes' },
   { key: 'link',      label: 'Link' },
   { key: '_source',   label: 'Source' },
 ];
+// Columns that sort numerically rather than alphabetically
+const NUMERIC_SORT_KEYS = new Set(['createdAt', 'likes']);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ADMIN VIEW — submissions dashboard (admin emails only)
@@ -1906,8 +2196,8 @@ function AdminView({ nav, authUser, isAdmin }) {
     return rows
       .filter(r => !q || ADMIN_COLS.some(c => String(r[c.key] || '').toLowerCase().includes(q)))
       .sort((a, b) => {
-        const av = sortKey === 'createdAt' ? (a[sortKey] || 0) : String(a[sortKey] || '').toLowerCase();
-        const bv = sortKey === 'createdAt' ? (b[sortKey] || 0) : String(b[sortKey] || '').toLowerCase();
+        const av = NUMERIC_SORT_KEYS.has(sortKey) ? (Number(a[sortKey]) || 0) : String(a[sortKey] || '').toLowerCase();
+        const bv = NUMERIC_SORT_KEYS.has(sortKey) ? (Number(b[sortKey]) || 0) : String(b[sortKey] || '').toLowerCase();
         if (av < bv) return sortDir === 'asc' ? -1 : 1;
         if (av > bv) return sortDir === 'asc' ? 1 : -1;
         return 0;
@@ -1920,7 +2210,7 @@ function AdminView({ nav, authUser, isAdmin }) {
   };
 
   const exportCSV = () => {
-    const exportCols = ['createdAt','creator','email','program','city','alxStatus','category','title','link','description','linkedin','instagram','tiktok','_source'];
+    const exportCols = ['createdAt','creator','email','program','city','alxStatus','category','title','likes','link','description','linkedin','instagram','tiktok','_source'];
     const header = exportCols.join(',');
     const rowsCsv = filtered.map(r =>
       exportCols.map(k => {
@@ -1969,12 +2259,13 @@ function AdminView({ nav, authUser, isAdmin }) {
       <div className="px-4 sm:px-6 py-6">
 
         {/* ── Stat cards ─────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
           {[
-            { label:'Total Submissions', value: rows.length,                                              color: C.purple },
-            { label:'From Firestore',    value: rows.filter(r => r._source === 'Firestore').length,       color: C.blue   },
-            { label:'From Sheets',       value: rows.filter(r => r._source === 'Sheets').length,          color: '#EAB308'},
-            { label:'Unique Programs',   value: new Set(rows.map(r => r.program).filter(Boolean)).size,   color: C.green  },
+            { label:'Total Submissions', value: rows.length,                                                                    color: C.purple },
+            { label:'From Firestore',    value: rows.filter(r => r._source === 'Firestore').length,                             color: C.blue   },
+            { label:'From Sheets',       value: rows.filter(r => r._source === 'Sheets').length,                                color: '#EAB308'},
+            { label:'Unique Programs',   value: new Set(rows.map(r => r.program).filter(Boolean)).size,                         color: C.green  },
+            { label:'Total Likes',       value: rows.reduce((sum, r) => sum + (Number(r.likes) || 0), 0),                       color: '#E11D48' },
           ].map(({ label, value, color }) => (
             <div key={label} className="rounded-2xl p-5 border" style={{ background:'#0B1120', borderColor:'rgba(255,255,255,0.07)' }}>
               <div className="text-3xl font-black mb-1" style={{ color }}>{loading ? '—' : value}</div>
@@ -2057,6 +2348,14 @@ function AdminView({ nav, authUser, isAdmin }) {
                       </td>
                       <td className="px-4 py-3 font-medium text-white" style={{ maxWidth:180 }}>
                         <span className="block truncate" title={r.title}>{r.title || '—'}</span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {(r.likes > 0)
+                          ? <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black"
+                              style={{ background:'#E11D4820', color:'#E11D48' }}>
+                              <Heart size={11} fill="currentColor"/> {r.likes}
+                            </span>
+                          : <span className="text-xs" style={{ color:'#475569' }}>0</span>}
                       </td>
                       <td className="px-4 py-3">
                         {r.link?.startsWith('http')
