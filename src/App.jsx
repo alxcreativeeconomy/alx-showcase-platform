@@ -11,7 +11,7 @@ import {
 // ─── Firebase ────────────────────────────────────────────────────────────────
 import { db, auth, storage } from './firebase';
 import { collection, addDoc, getDocs, getDoc, query, orderBy, limit, doc, setDoc, updateDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
-import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 
@@ -1620,24 +1620,32 @@ function AuthModal({ mode: initialMode, onClose, onSuccess }) {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const inp = "w-full border rounded-2xl px-5 py-4 focus:outline-none text-base font-medium transition";
   const inpStyle = { borderColor:'rgba(0,0,0,0.1)', color:C.dark };
 
+  const switchMode = (m) => { setMode(m); setError(''); setSuccess(''); };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
     try {
       if (mode === 'signup') {
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(cred.user, { displayName: name });
         setDoc(doc(db, 'users', cred.user.uid), { name, email, createdAt: Date.now() }).catch(() => {});
+        onSuccess();
+      } else if (mode === 'reset') {
+        await sendPasswordResetEmail(auth, email);
+        setSuccess('Password reset email sent! Check your inbox.');
       } else {
         await signInWithEmailAndPassword(auth, email, password);
+        onSuccess();
       }
-      onSuccess();
     } catch (err) {
       setError(err.message.replace('Firebase: ', '').replace(/\s*\(auth\/[^)]+\)\.?/, '').trim());
     }
@@ -1673,32 +1681,35 @@ function AuthModal({ mode: initialMode, onClose, onSuccess }) {
         </button>
         <div className="p-10">
           <h2 className="text-3xl font-black mb-1 tracking-tight" style={{ color:C.dark }}>
-            {mode === 'signin' ? 'Welcome back' : 'Join the Showcase'}
+            {mode === 'signin' ? 'Welcome back' : mode === 'signup' ? 'Join the Showcase' : 'Reset Password'}
           </h2>
           <p className="mb-8 font-light" style={{ color:`${C.dark}55` }}>
-            {mode === 'signin' ? 'Sign in to submit and manage your work.' : 'Create a free account and build your creator profile.'}
+            {mode === 'signin' ? 'Sign in to submit and manage your work.'
+              : mode === 'signup' ? 'Create a free account and build your creator profile.'
+              : "Enter your email and we'll send you a reset link."}
           </p>
 
-          {/* Google sign-in */}
-          <button onClick={handleGoogle} disabled={loading}
-            className="w-full py-3.5 rounded-2xl font-black text-base border flex items-center justify-center gap-3 transition hover:bg-gray-50 disabled:opacity-60 mb-5"
-            style={{ borderColor:'rgba(0,0,0,0.12)', color:C.dark }}>
-            {/* Google "G" logo */}
-            <svg width="20" height="20" viewBox="0 0 48 48">
-              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-              <path fill="none" d="M0 0h48v48H0z"/>
-            </svg>
-            Continue with Google
-          </button>
-
-          {/* Divider */}
-          <div className="relative mb-5">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor:'rgba(0,0,0,0.08)' }}/></div>
-            <div className="relative flex justify-center"><span className="px-4 text-xs uppercase font-black tracking-widest bg-white" style={{ color:`${C.dark}35` }}>or continue with email</span></div>
-          </div>
+          {/* Google sign-in — only for signin/signup */}
+          {mode !== 'reset' && (
+            <>
+              <button onClick={handleGoogle} disabled={loading}
+                className="w-full py-3.5 rounded-2xl font-black text-base border flex items-center justify-center gap-3 transition hover:bg-gray-50 disabled:opacity-60 mb-5"
+                style={{ borderColor:'rgba(0,0,0,0.12)', color:C.dark }}>
+                <svg width="20" height="20" viewBox="0 0 48 48">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                  <path fill="none" d="M0 0h48v48H0z"/>
+                </svg>
+                Continue with Google
+              </button>
+              <div className="relative mb-5">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor:'rgba(0,0,0,0.08)' }}/></div>
+                <div className="relative flex justify-center"><span className="px-4 text-xs uppercase font-black tracking-widest bg-white" style={{ color:`${C.dark}35` }}>or continue with email</span></div>
+              </div>
+            </>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {mode === 'signup' && (
@@ -1715,27 +1726,51 @@ function AuthModal({ mode: initialMode, onClose, onSuccess }) {
                 className={inp} style={inpStyle}
                 onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
             </div>
-            <div>
-              <label className="block text-xs font-black mb-2 uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Password</label>
-              <input required type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" minLength={6}
-                className={inp} style={inpStyle}
-                onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
-            </div>
+            {mode !== 'reset' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-black uppercase tracking-wide" style={{ color:`${C.dark}70` }}>Password</label>
+                  {mode === 'signin' && (
+                    <button type="button" onClick={() => switchMode('reset')}
+                      className="text-xs font-black transition hover:opacity-70" style={{ color:C.purple }}>
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <input required type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" minLength={6}
+                  className={inp} style={inpStyle}
+                  onFocus={e => e.target.style.borderColor = C.purple} onBlur={e => e.target.style.borderColor = 'rgba(0,0,0,0.1)'}/>
+              </div>
+            )}
             {error && (
               <p className="text-sm font-medium px-4 py-3 rounded-xl" style={{ background:`${C.yellow}25`, color:'#92400e' }}>{error}</p>
+            )}
+            {success && (
+              <p className="text-sm font-medium px-4 py-3 rounded-xl" style={{ background:'#d1fae5', color:'#065f46' }}>{success}</p>
             )}
             <button type="submit" disabled={loading}
               className="w-full py-4 rounded-2xl font-black text-white text-base shadow-xl transition hover:opacity-90 disabled:opacity-60 flex items-center justify-center"
               style={{ background:`linear-gradient(135deg,${C.purple},${C.blue})` }}>
-              {loading ? <Loader size={20} className="animate-spin"/> : mode === 'signin' ? 'Sign In' : 'Create Account'}
+              {loading ? <Loader size={20} className="animate-spin"/>
+                : mode === 'signin' ? 'Sign In'
+                : mode === 'signup' ? 'Create Account'
+                : 'Send Reset Link'}
             </button>
           </form>
           <p className="text-center text-sm mt-6" style={{ color:`${C.dark}50` }}>
-            {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
-            <button onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); }}
-              className="font-black transition hover:opacity-70" style={{ color:C.purple }}>
-              {mode === 'signin' ? 'Sign Up' : 'Sign In'}
-            </button>
+            {mode === 'reset' ? (
+              <>Remember your password?{' '}
+                <button onClick={() => switchMode('signin')} className="font-black transition hover:opacity-70" style={{ color:C.purple }}>Sign In</button>
+              </>
+            ) : mode === 'signin' ? (
+              <>Don&apos;t have an account?{' '}
+                <button onClick={() => switchMode('signup')} className="font-black transition hover:opacity-70" style={{ color:C.purple }}>Sign Up</button>
+              </>
+            ) : (
+              <>Already have an account?{' '}
+                <button onClick={() => switchMode('signin')} className="font-black transition hover:opacity-70" style={{ color:C.purple }}>Sign In</button>
+              </>
+            )}
           </p>
         </div>
       </motion.div>
